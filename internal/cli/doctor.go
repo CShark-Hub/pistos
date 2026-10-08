@@ -1,13 +1,17 @@
 package cli
 
 import (
+	"context"
 	"fmt"
+	"path/filepath"
 	"runtime"
 	"strings"
 
 	"github.com/spf13/cobra"
 
 	"example.com/pistos/internal/config"
+	"example.com/pistos/internal/plugin"
+	"example.com/pistos/internal/store"
 )
 
 func (a *app) doctorCommand() *cobra.Command {
@@ -40,8 +44,40 @@ func (a *app) doctorCommand() *cobra.Command {
 }
 
 func (a *app) doctorTools(repo string, cfg *config.Config, lock *config.Lock) error {
-	if len(lock.Packs) == 0 {
-		fmt.Fprintln(a.stdout, "lock     no tools locked; run `pistos plugins install`")
+	tb := plugin.NewToolbox(repo, store.Store{Repo: repo}.StateDir(), lock, plugin.BaseEnv(nil))
+	defer tb.Save()
+	problems := 0
+	seen := map[string]bool{}
+	for _, p := range cfg.Projects {
+		eco, _ := config.NormalizeLanguage(p.Ecosystem)
+		m, err := plugin.LoadManifest(eco)
+		if err != nil {
+			return withCode(ExitError, err)
+		}
+		for _, check := range p.Checks {
+			if _, ok := m.Checks[check]; !ok {
+				fmt.Fprintf(a.stdout, "✗ %s: unknown check %q\n", p.ID, check)
+				problems++
+				continue
+			}
+			for _, tool := range m.ToolsFor(check) {
+				dir := filepath.Join(repo, filepath.FromSlash(p.Root))
+				if seen[eco+tool+dir] {
+					continue
+				}
+				seen[eco+tool+dir] = true
+				rt, err := tb.Resolve(context.Background(), m, tool, dir)
+				if err != nil {
+					fmt.Fprintf(a.stdout, "✗ %-8s %-14s %v\n", eco, tool, err)
+					problems++
+					continue
+				}
+				fmt.Fprintf(a.stdout, "✓ %-8s %-14s %-12s %-8s %s\n", eco, tool, rt.Version, rt.Source, rt.Path)
+			}
+		}
+	}
+	if problems > 0 {
+		return withCode(ExitError, fmt.Errorf("%d problem(s) found", problems))
 	}
 	return nil
 }
