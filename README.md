@@ -46,6 +46,10 @@ Optional BYOK AI review (`--profile thorough`) runs independent discovery passes
 OpenAI-compatible endpoint, unions and triages their candidates and publishes advisory issues with
 provenance; see [docs/ai.md](docs/ai.md).
 
+Output formats: text, JSON, canonical JSON and SARIF 2.1.0. Analyzers can run natively or in pinned
+per-pack containers (`execution.mode = "docker"`, restricted profile for untrusted code); see
+[docs/install.md](docs/install.md) and [docs/security.md](docs/security.md).
+
 ## Module path
 
 The Go module path `example.com/pistos` is a placeholder until the publishing identity is decided.

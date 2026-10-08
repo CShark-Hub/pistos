@@ -54,6 +54,17 @@ func Install(ctx context.Context, cfg *config.Config, lock *config.Lock, o Insta
 	}
 	tb := NewToolbox(o.Repo, o.StateDir, lock, BaseEnv(nil))
 	defer tb.Save()
+	var images []InstallResult
+	if cfg.Execution.Mode == "docker" {
+		rt, err := NewContainerRuntime()
+		if err != nil {
+			return nil, err
+		}
+		tb.Container = rt
+		if images, err = ensureImages(ctx, rt, cfg, lock, o, log); err != nil {
+			return images, err
+		}
+	}
 
 	type need struct {
 		m          *Manifest
@@ -110,7 +121,7 @@ func Install(ctx context.Context, cfg *config.Config, lock *config.Lock, o Insta
 		return needs[i].m.Tools[needs[i].tool].Acquire == nil && needs[j].m.Tools[needs[j].tool].Acquire != nil
 	})
 
-	var results []InstallResult
+	results := images
 	var failed bool
 	for _, n := range needs {
 		r := InstallResult{Tool: n.tool, Pack: n.m.Name}
@@ -303,4 +314,58 @@ func runAcquire(ctx context.Context, exe string, args []string, dir string, env 
 		return fmt.Errorf("%s %s failed: %s", filepath.Base(exe), strings.Join(args, " "), tail(strings.Split(string(res.Stderr)+string(res.Stdout), "\n")))
 	}
 	return nil
+}
+
+// ensureImages builds missing pack images and records their IDs. Under --locked an image whose ID
+// differs from the lock is an error: a rebuilt image is a changed toolchain.
+func ensureImages(ctx context.Context, rt *ContainerRuntime, cfg *config.Config, lock *config.Lock, o InstallOptions, log func(string)) ([]InstallResult, error) {
+	var out []InstallResult
+	seen := map[string]bool{}
+	for _, p := range cfg.Projects {
+		eco, _ := config.NormalizeLanguage(p.Ecosystem)
+		if seen[eco] {
+			continue
+		}
+		seen[eco] = true
+		m, err := LoadManifest(eco)
+		if err != nil {
+			return out, err
+		}
+		r := InstallResult{Pack: eco, Tool: "image", Version: ImageTag(m), Source: "docker"}
+		id := rt.ImageID(ctx, m)
+		if id == "" {
+			if o.Offline {
+				r.Err = fmt.Errorf("image %s is not built and --offline forbids pulling base images", ImageTag(m))
+				return append(out, r), r.Err
+			}
+			log("building image " + ImageTag(m))
+			if id, err = rt.Build(ctx, m); err != nil {
+				r.Err = err
+				return append(out, r), err
+			}
+			r.Action = "built"
+		} else {
+			r.Action = "found"
+		}
+		r.Path = id
+		pl := lock.Packs[eco]
+		if o.Locked {
+			if pl.Image == nil || pl.Image.ID[Platform()] != id {
+				r.Err = fmt.Errorf("image %s is %s but lock.json records a different image", ImageTag(m), id)
+				return append(out, r), r.Err
+			}
+		} else {
+			if pl.Image == nil || pl.Image.Tag != ImageTag(m) {
+				pl.Image = &config.ImageLock{Tag: ImageTag(m), ID: map[string]string{}}
+			}
+			pl.Image.ID[Platform()] = id
+			pl.Version = m.Version
+			if pl.Tools == nil {
+				pl.Tools = map[string]config.ToolLock{}
+			}
+			lock.Packs[eco] = pl
+		}
+		out = append(out, r)
+	}
+	return out, nil
 }

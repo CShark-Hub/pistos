@@ -229,5 +229,19 @@
         "pythonPath": "{var:python}"
       }
     }
+  },
+  "container": {
+    "dockerfile": "python/Dockerfile",
+    "files": [
+      "python/facts.py"
+    ],
+    "tools": {
+      "python": "/usr/local/bin/python3",
+      "node": "/usr/local/bin/node",
+      "ruff": "/usr/local/bin/ruff",
+      "pyright": "/opt/pyright/index.js",
+      "pyright-langserver": "/opt/pyright/langserver.index.js",
+      "facts-worker": "/opt/pistos/facts.py"
+    }
   }
 }

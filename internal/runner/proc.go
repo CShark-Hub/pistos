@@ -24,6 +24,8 @@ type Cmd struct {
 	Stdin     io.Reader
 	MaxOutput int
 	Timeout   time.Duration
+	// Cleanup releases resources outside the process tree (e.g. a container) after cancellation.
+	Cleanup func()
 }
 
 type Result struct {
@@ -84,6 +86,9 @@ func Run(ctx context.Context, c Cmd) (Result, error) {
 	}
 	// Descendants that outlive the tool would keep consuming resources and could hold files open.
 	reapGroup(cmd)
+	if (res.TimedOut || res.Cancelled) && c.Cleanup != nil {
+		c.Cleanup()
+	}
 
 	res.Duration = time.Since(start)
 	res.Stdout, res.Stderr = stdout.Bytes(), stderr.Bytes()
@@ -132,12 +137,13 @@ func (w *capWriter) Bytes() []byte {
 
 // Proc is a long-lived supervised process with stdio pipes, used for workers and language servers.
 type Proc struct {
-	cmd    *exec.Cmd
-	Stdin  io.WriteCloser
-	Stdout io.ReadCloser
-	stderr *capWriter
-	done   chan struct{}
-	err    error
+	cmd     *exec.Cmd
+	Stdin   io.WriteCloser
+	Stdout  io.ReadCloser
+	stderr  *capWriter
+	done    chan struct{}
+	err     error
+	cleanup func()
 }
 
 func Start(c Cmd) (*Proc, error) {
@@ -150,7 +156,7 @@ func Start(c Cmd) (*Proc, error) {
 	if cmd.Env == nil {
 		cmd.Env = []string{}
 	}
-	p := &Proc{cmd: cmd, stderr: &capWriter{max: c.MaxOutput}, done: make(chan struct{})}
+	p := &Proc{cmd: cmd, stderr: &capWriter{max: c.MaxOutput}, done: make(chan struct{}), cleanup: c.Cleanup}
 	cmd.Stderr = p.stderr
 	setProcessGroup(cmd)
 	var err error
@@ -188,6 +194,9 @@ func (p *Proc) Stderr() []byte { return p.stderr.Bytes() }
 func (p *Proc) Kill() {
 	killTree(p.cmd)
 	<-p.done
+	if p.cleanup != nil {
+		p.cleanup()
+	}
 }
 
 // Wait waits up to grace for a voluntary exit, then kills the tree.

@@ -60,6 +60,7 @@ type engine struct {
 	git       snapshot.Git
 	store     store.Store
 	toolbox   *plugin.Toolbox
+	container *plugin.ContainerRuntime
 	manifests map[string]*plugin.Manifest
 	sources   *sourceCache
 	treeRoot  string
@@ -77,9 +78,6 @@ type treeOnce struct {
 }
 
 func newEngine(ctx context.Context, o Options, cfg *config.Config) (*engine, error) {
-	if cfg.Execution.Mode != "native" {
-		return nil, &ConfigError{fmt.Errorf("execution.mode %q is not available in this build", cfg.Execution.Mode)}
-	}
 	lock, err := config.LoadLock(o.Repo)
 	if err != nil {
 		return nil, &ConfigError{err}
@@ -99,6 +97,13 @@ func newEngine(ctx context.Context, o Options, cfg *config.Config) (*engine, err
 	// installed dependencies.
 	e.treeRoot = filepath.Join(root, "trees", fsutil.HashStrings(o.Repo)[:16])
 	e.toolbox = plugin.NewToolbox(o.Repo, e.store.StateDir(), lock, plugin.BaseEnv(nil))
+	if cfg.Execution.Mode == "docker" {
+		rt, err := plugin.NewContainerRuntime()
+		if err != nil {
+			return nil, &ConfigError{err}
+		}
+		e.container, e.toolbox.Container = rt, rt
+	}
 	return e, nil
 }
 
@@ -493,6 +498,16 @@ func (e *engine) runTask(ctx context.Context, t task) (finding.CapabilityResult,
 		ScratchDir: scratch,
 		Tree:       plugin.TreeScope{ID: t.tree, Project: t.project.ID},
 		Vars:       prep.vars,
+	}
+	if e.container != nil && m.Container != nil && check.Format != plugin.FormatBuiltinGo {
+		inv.Container = &plugin.ContainerSpec{
+			Runtime: e.container, Image: plugin.ImageTag(m), Restricted: e.cfg.Execution.Docker.Profile == "restricted",
+			MemoryMB: e.cfg.Execution.MemoryMB, CPUs: t.Weight, Env: prep.containerEnv,
+			Mounts: append([]plugin.Mount{{Path: workRoot, ReadOnly: true}, {Path: scratch}}, prep.mounts...),
+		}
+		if err := os.MkdirAll(scratch, 0o755); err != nil {
+			return fail(finding.StatusFailed, err)
+		}
 	}
 	e.progress("%s: %s", t.ID, toolPath)
 	parsed, status, err := plugin.Execute(ctx, inv)

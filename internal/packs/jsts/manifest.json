@@ -196,5 +196,16 @@
       ".cjs": "javascript",
       ".jsx": "javascriptreact"
     }
+  },
+  "container": {
+    "dockerfile": "jsts/Dockerfile",
+    "files": [
+      "jsts/facts.mjs"
+    ],
+    "tools": {
+      "node": "/usr/local/bin/node",
+      "oxlint": "/opt/pistos/node_modules/oxlint/bin/oxlint",
+      "facts-worker": "/opt/pistos/facts.mjs"
+    }
   }
 }

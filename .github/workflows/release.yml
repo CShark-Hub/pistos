@@ -1,0 +1,48 @@
+name: release-artifacts
+
+# Builds release archives and pack images as workflow artifacts. Nothing is published to a
+# registry or package index; promoting artifacts is a separate, manual decision.
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  core:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - run: ./scripts/release.sh "${GITHUB_REF_NAME}"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pistos-core
+          path: dist/*.tar.gz dist/SHA256SUMS
+
+  images:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        pack: [go, python, jsts, csharp]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Build pack image and complete image
+        run: |
+          CGO_ENABLED=0 go build -o ctx/pistos ./cmd/pistos
+          ctx/pistos plugins image ${{ matrix.pack }}
+          docker build -f docker/full.Dockerfile --build-arg PACK=${{ matrix.pack }} -t pistos-${{ matrix.pack }}:${GITHUB_SHA} ctx
+          docker save pistos-${{ matrix.pack }}:${GITHUB_SHA} | gzip > pistos-${{ matrix.pack }}.tar.gz
+      - uses: actions/upload-artifact@v4
+        with:
+          name: image-${{ matrix.pack }}
+          path: pistos-${{ matrix.pack }}.tar.gz

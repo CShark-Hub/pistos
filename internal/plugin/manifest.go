@@ -27,6 +27,7 @@ type Manifest struct {
 	Tools          map[string]Tool   `json:"tools"`
 	Checks         map[string]Check  `json:"checks"`
 	LSP            *LSP              `json:"lsp,omitempty"`
+	Container      *Container        `json:"container,omitempty"`
 	Aliases        map[string]string `json:"aliases"`
 	Authority      []string          `json:"authority"`
 }

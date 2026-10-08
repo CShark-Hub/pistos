@@ -4,5 +4,5 @@ package packs
 
 import "embed"
 
-//go:embed */manifest.json python/facts.py jsts/facts.mjs csharp/worker/PistosFacts.csproj csharp/worker/Program.cs
+//go:embed */manifest.json */Dockerfile python/facts.py jsts/facts.mjs csharp/worker/PistosFacts.csproj csharp/worker/Program.cs
 var FS embed.FS

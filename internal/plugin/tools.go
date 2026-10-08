@@ -227,12 +227,14 @@ func (c *identityCache) save() {
 
 // Toolbox resolves tools for a review, verifying each against the lock.
 type Toolbox struct {
-	Repo     string
-	Lock     *config.Lock
-	Env      []string
-	cache    *identityCache
-	mu       sync.Mutex
-	resolved map[string]ResolvedTool
+	Repo string
+	Lock *config.Lock
+	Env  []string
+	// Container, when set, resolves pack tools inside the pack image (execution.mode = "docker").
+	Container *ContainerRuntime
+	cache     *identityCache
+	mu        sync.Mutex
+	resolved  map[string]ResolvedTool
 }
 
 func NewToolbox(repo, stateDir string, lock *config.Lock, env []string) *Toolbox {
@@ -243,7 +245,20 @@ func (tb *Toolbox) Save() { tb.cache.save() }
 
 // Identify locates a tool and computes its identity (file hash plus probed version).
 func (tb *Toolbox) Identify(ctx context.Context, m *Manifest, name, projectDir string) (ResolvedTool, error) {
+	if tb.Container != nil && m.Container != nil {
+		if p, ok := m.Container.Tools[name]; ok {
+			return tb.identifyInImage(ctx, m, name, p)
+		}
+	}
 	path, source, err := Locate(m, name, tb.Repo, projectDir)
+	// Inside a complete pistos image the pack's tools sit at the paths its Dockerfile installed.
+	if os.Getenv("PISTOS_IN_IMAGE") == "1" && m.Container != nil {
+		if p, ok := m.Container.Tools[name]; ok {
+			if _, statErr := os.Stat(p); statErr == nil {
+				path, source, err = p, "image", nil
+			}
+		}
+	}
 	if err != nil {
 		return ResolvedTool{}, err
 	}
@@ -285,7 +300,8 @@ func (tb *Toolbox) Identify(ctx context.Context, m *Manifest, name, projectDir s
 			exe, args = r.Path, []string{path}
 		}
 		var version string
-		if m.Tools[name].VersionFrom == "package-json" {
+		// In docker mode a repository tool runs on the image's runtime, so the host may lack one.
+		if m.Tools[name].VersionFrom == "package-json" || (tb.Container != nil && m.Tools[name].Runtime != "") {
 			version, err = packageVersion(real)
 		} else {
 			version, err = ProbeVersion(ctx, m.Tools[name], exe, args, env)
@@ -401,4 +417,41 @@ func packageVersion(file string) (string, error) {
 			return "", fmt.Errorf("no package.json with a version above %s", file)
 		}
 	}
+}
+
+// identifyInImage resolves a tool baked into the pack image; its identity is the image ID plus the
+// version reported inside the image, so a rebuilt image is a changed tool.
+func (tb *Toolbox) identifyInImage(ctx context.Context, m *Manifest, name, path string) (ResolvedTool, error) {
+	id := tb.Container.ImageID(ctx, m)
+	if id == "" {
+		return ResolvedTool{}, fmt.Errorf("%w: image %s is not built; run `pistos plugins install`", ErrNotFound, ImageTag(m))
+	}
+	t := m.Tools[name]
+	cacheKey := "container:" + id + ":" + name
+	tb.cache.mu.Lock()
+	e, ok := tb.cache.Entries[cacheKey]
+	tb.cache.mu.Unlock()
+	if !ok {
+		version := m.Version
+		if t.VersionFrom != "pack" {
+			argv := append([]string{path}, t.VersionArgs...)
+			if t.Runtime != "" {
+				argv = append([]string{m.Container.Tools[t.Runtime]}, argv...)
+			}
+			out, err := tb.Container.probe(ctx, ImageTag(m), argv)
+			if err != nil {
+				return ResolvedTool{}, err
+			}
+			mm := regexp.MustCompile(`(?m)` + t.VersionRegex).FindStringSubmatch(out)
+			if len(mm) < 2 {
+				return ResolvedTool{}, fmt.Errorf("cannot determine version of %s in %s: %.200s", name, ImageTag(m), out)
+			}
+			version = mm[1]
+		}
+		e = identityEntry{Version: version, Identity: fsutil.HashStrings(id, version)}
+		tb.cache.mu.Lock()
+		tb.cache.Entries[cacheKey] = e
+		tb.cache.mu.Unlock()
+	}
+	return ResolvedTool{Pack: m.Name, Name: name, Path: path, Version: e.Version, Identity: e.Identity, Source: "container", LockKey: name}, nil
 }

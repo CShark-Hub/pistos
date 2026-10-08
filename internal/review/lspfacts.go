@@ -93,6 +93,10 @@ func Facts(ctx context.Context, q FactsQuery) (*FactsResult, error) {
 	}
 	defer e.toolbox.Save()
 
+	if cfg.Execution.Mode == "docker" {
+		return &FactsResult{Schema: factsSchema, Method: q.Method, Path: rel, Line: q.Line, Column: q.Column, Status: finding.StatusUnsupported,
+			Reason: "language-server facts run natively; execution.mode = \"docker\" locks container tools only"}, nil
+	}
 	project, err := owningProject(cfg, rel)
 	if err != nil {
 		return nil, &ConfigError{err}

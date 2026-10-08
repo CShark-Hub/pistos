@@ -26,6 +26,13 @@ type Lock struct {
 type PackLock struct {
 	Version string              `json:"version"`
 	Tools   map[string]ToolLock `json:"tools"`
+	// Image records the locally built pack image used by execution.mode = "docker".
+	Image *ImageLock `json:"image,omitempty"`
+}
+
+type ImageLock struct {
+	Tag string            `json:"tag"`
+	ID  map[string]string `json:"id"`
 }
 
 type ToolLock struct {

@@ -9,6 +9,7 @@ import (
 
 	"example.com/pistos/internal/config"
 	"example.com/pistos/internal/fsutil"
+	"example.com/pistos/internal/plugin"
 )
 
 // preparation carries the ecosystem-specific inputs of one task.
@@ -18,6 +19,9 @@ type preparation struct {
 	// virtualenvs); it is part of the cache key.
 	fingerprint string
 	limits      []string
+	// mounts and containerEnv expose host dependencies to a pack container (docker mode only).
+	mounts       []plugin.Mount
+	containerEnv map[string]string
 }
 
 // dotnetProps is injected through CustomBeforeMicrosoftCommonTargets so every project and target
@@ -30,7 +34,8 @@ const dotnetProps = `<Project>
 `
 
 func (e *engine) prepare(t task, workRoot, scratch string) (preparation, error) {
-	p := preparation{vars: map[string]string{}}
+	p := preparation{vars: map[string]string{}, containerEnv: map[string]string{}}
+	docker := e.container != nil
 	repoProject := filepath.Join(e.opts.Repo, filepath.FromSlash(t.project.Root))
 	switch t.project.Ecosystem {
 	case config.JSTS:
@@ -38,11 +43,14 @@ func (e *engine) prepare(t task, workRoot, scratch string) (preparation, error) 
 		if v := t.project.Options["tsconfig"]; v != "" {
 			p.vars["tsconfig"] = v
 		}
-		linked, fp, err := linkNodeModules(e.opts.Repo, workRoot, t.project.Root)
+		linked, fp, dirs, err := linkNodeModules(e.opts.Repo, workRoot, t.project.Root)
 		if err != nil {
 			return p, err
 		}
 		p.fingerprint = fp
+		for _, d := range dirs {
+			p.mounts = append(p.mounts, plugin.Mount{Path: d, ReadOnly: true})
+		}
 		if !linked {
 			p.limits = append(p.limits, "no installed node_modules found for this project; imports of dependencies cannot resolve")
 		}
@@ -55,7 +63,9 @@ func (e *engine) prepare(t task, workRoot, scratch string) (preparation, error) 
 		} else {
 			python = findVenvPython(repoProject, e.opts.Repo)
 		}
-		if python != "" {
+		if python != "" && docker {
+			p.limits = append(p.limits, "docker mode: the host virtualenv is not used inside the container; imports resolve against the image's Python")
+		} else if python != "" {
 			p.vars["python"] = python
 			p.fingerprint = sitePackagesFingerprint(python)
 		} else if usesVar(e.manifests[t.project.Ecosystem].Checks[t.Capability].Args, "python") {
@@ -70,15 +80,27 @@ func (e *engine) prepare(t task, workRoot, scratch string) (preparation, error) 
 		p.vars["sarif_dir"] = filepath.Join(scratch, "sarif")
 		p.vars["artifacts"] = filepath.Join(scratch, "artifacts")
 		p.vars["restore_sources"] = nugetLocalSource(scratch)
+		if docker {
+			p.mounts = append(p.mounts, plugin.Mount{Path: p.vars["restore_sources"], ReadOnly: true})
+			p.containerEnv["NUGET_PACKAGES"] = filepath.Join(scratch, "nuget")
+			p.containerEnv["DOTNET_CLI_HOME"] = "/tmp/home"
+		}
+	case config.Go:
+		if docker {
+			if mod := goModCache(); mod != "" {
+				p.mounts = append(p.mounts, plugin.Mount{Path: mod, ReadOnly: true})
+				p.containerEnv["GOMODCACHE"] = mod
+			}
+		}
 	}
 	return p, nil
 }
 
 // linkNodeModules exposes the repository's installed node_modules (project and ancestors, for
 // hoisted workspaces) inside the snapshot: dependencies are reused, never installed by a review.
-func linkNodeModules(repo, workRoot, root string) (bool, string, error) {
+func linkNodeModules(repo, workRoot, root string) (bool, string, []string, error) {
 	linked := false
-	var parts []string
+	var parts, dirs []string
 	for rel := root; ; rel = parentDir(rel) {
 		src := filepath.Join(repo, filepath.FromSlash(rel), "node_modules")
 		if fi, err := os.Stat(src); err == nil && fi.IsDir() {
@@ -86,10 +108,11 @@ func linkNodeModules(repo, workRoot, root string) (bool, string, error) {
 			if _, err := os.Lstat(dst); os.IsNotExist(err) {
 				// Checks sharing this tree link concurrently; losing the race is fine.
 				if err := os.Symlink(src, dst); err != nil && !os.IsExist(err) {
-					return false, "", err
+					return false, "", nil, err
 				}
 			}
 			linked = true
+			dirs = append(dirs, src)
 			fp := ""
 			for _, lock := range []string{".package-lock.json", ".modules.yaml", ".yarn-state.yml"} {
 				if h, err := fsutil.HashFile(filepath.Join(src, lock)); err == nil {
@@ -106,7 +129,24 @@ func linkNodeModules(repo, workRoot, root string) (bool, string, error) {
 			break
 		}
 	}
-	return linked, fsutil.HashStrings(parts...), nil
+	return linked, fsutil.HashStrings(parts...), dirs, nil
+}
+
+// goModCache locates the host module cache so containers resolve dependencies without downloading.
+func goModCache() string {
+	if d := os.Getenv("GOMODCACHE"); d != "" {
+		return d
+	}
+	gopath := os.Getenv("GOPATH")
+	if gopath == "" {
+		home, _ := os.UserHomeDir()
+		gopath = filepath.Join(home, "go")
+	}
+	d := filepath.Join(strings.Split(gopath, string(os.PathListSeparator))[0], "pkg", "mod")
+	if fi, err := os.Stat(d); err == nil && fi.IsDir() {
+		return d
+	}
+	return ""
 }
 
 func findVenvPython(dirs ...string) string {

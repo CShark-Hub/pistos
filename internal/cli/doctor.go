@@ -46,6 +46,13 @@ func (a *app) doctorCommand() *cobra.Command {
 func (a *app) doctorTools(repo string, cfg *config.Config, lock *config.Lock) error {
 	tb := plugin.NewToolbox(repo, store.Store{Repo: repo}.StateDir(), lock, plugin.BaseEnv(nil))
 	defer tb.Save()
+	if cfg.Execution.Mode == "docker" {
+		rt, err := plugin.NewContainerRuntime()
+		if err != nil {
+			return withCode(ExitError, err)
+		}
+		tb.Container = rt
+	}
 	problems := 0
 	seen := map[string]bool{}
 	for _, p := range cfg.Projects {

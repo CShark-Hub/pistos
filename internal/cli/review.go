@@ -34,8 +34,8 @@ independently of uncommitted changes. --all reviews the whole working snapshot.`
 			if verbose {
 				o.Progress = func(s string) { fmt.Fprintln(a.stderr, "·", s) }
 			}
-			if format != "text" && format != "json" && format != "canonical-json" {
-				return withCode(ExitError, fmt.Errorf("unsupported --format %q (text, json, canonical-json)", format))
+			if format != "text" && format != "json" && format != "canonical-json" && format != "sarif" {
+				return withCode(ExitError, fmt.Errorf("unsupported --format %q (text, json, canonical-json, sarif)", format))
 			}
 			env, err := review.Run(cmd.Context(), o)
 			if err != nil {
@@ -53,6 +53,8 @@ independently of uncommitted changes. --all reviews the whole working snapshot.`
 				err = report.JSON(a.stdout, env)
 			case "canonical-json":
 				err = report.Canonical(a.stdout, env)
+			case "sarif":
+				err = report.SARIF(a.stdout, env, Version)
 			default:
 				report.Text(a.stdout, env, report.TextOptions{IncludeIgnored: includeIgnored, IncludeExisting: includeExisting || o.All})
 			}
@@ -72,7 +74,7 @@ independently of uncommitted changes. --all reviews the whole working snapshot.`
 	f.StringVar(&o.Profile, "profile", "", "fast, balanced or thorough (default from config)")
 	f.BoolVar(&o.Offline, "offline", false, "forbid network access by pistos and declared tool fetches")
 	f.IntVarP(&o.Jobs, "jobs", "j", 0, "parallel job budget (default from config)")
-	f.StringVar(&format, "format", "text", "text, json or canonical-json")
+	f.StringVar(&format, "format", "text", "text, json, canonical-json or sarif")
 	f.BoolVar(&includeIgnored, "include-ignored", false, "also list issues suppressed by feedback")
 	f.BoolVar(&includeExisting, "include-existing", false, "also list issues already present in the baseline")
 	f.BoolVar(&o.RefreshAI, "refresh-ai", false, "run fresh AI discovery instead of replaying recorded responses")

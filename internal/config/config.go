@@ -71,6 +71,13 @@ type Execution struct {
 	Jobs     int      `toml:"jobs"`
 	Timeout  Duration `toml:"timeout"`
 	MemoryMB int      `toml:"memory_mb"`
+	Docker   Docker   `toml:"docker"`
+}
+
+// Docker configures execution.mode = "docker". The restricted profile is the untrusted-analysis
+// boundary; trusted keeps the network and a writable root filesystem.
+type Docker struct {
+	Profile string `toml:"profile"`
 }
 
 type Policy struct {
@@ -197,6 +204,12 @@ func (c *Config) applyDefaults() {
 	if c.Execution.Mode == "" {
 		c.Execution.Mode = "native"
 	}
+	if c.Execution.Docker.Profile == "" {
+		c.Execution.Docker.Profile = "restricted"
+	}
+	if c.Execution.MemoryMB == 0 {
+		c.Execution.MemoryMB = 4096
+	}
 	if c.Execution.Jobs == 0 {
 		c.Execution.Jobs = 4
 	}
@@ -260,6 +273,9 @@ func (c *Config) Validate() error {
 	}
 	if c.Execution.Mode != "native" && c.Execution.Mode != "docker" {
 		add("execution.mode %q must be native or docker", c.Execution.Mode)
+	}
+	if c.Execution.Docker.Profile != "restricted" && c.Execution.Docker.Profile != "trusted" {
+		add("execution.docker.profile %q must be restricted or trusted", c.Execution.Docker.Profile)
 	}
 	if c.Execution.Jobs < 1 || c.Execution.Jobs > 256 {
 		add("execution.jobs must be between 1 and 256")

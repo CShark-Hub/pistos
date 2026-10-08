@@ -169,5 +169,14 @@
       "GOPROXY": "off",
       "GOTOOLCHAIN": "local"
     }
+  },
+  "container": {
+    "dockerfile": "go/Dockerfile",
+    "files": [],
+    "tools": {
+      "go": "/usr/local/go/bin/go",
+      "staticcheck": "/usr/local/bin/staticcheck",
+      "gopls": "/usr/local/bin/gopls"
+    }
   }
 }

@@ -149,5 +149,17 @@
       "DOTNET_CLI_TELEMETRY_OPTOUT": "1",
       "DOTNET_NOLOGO": "1"
     }
+  },
+  "container": {
+    "dockerfile": "csharp/Dockerfile",
+    "files": [
+      "csharp/worker/PistosFacts.csproj",
+      "csharp/worker/Program.cs"
+    ],
+    "tools": {
+      "dotnet": "/usr/bin/dotnet",
+      "facts-worker": "/opt/pistos/bin/PistosFacts.dll",
+      "csharp-ls": "/opt/pistos/tools/csharp-ls"
+    }
   }
 }

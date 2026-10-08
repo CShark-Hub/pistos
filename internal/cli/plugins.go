@@ -54,6 +54,31 @@ func (a *app) pluginsCommand() *cobra.Command {
 	install.Flags().BoolVar(&o.Locked, "locked", false, "fail instead of changing lock.json")
 	install.Flags().BoolVar(&o.LSP, "lsp", false, "also install and lock the language servers used by `pistos facts`")
 	install.Flags().BoolVar(&o.Offline, "offline", false, "never download; only verify locally available tools")
-	cmd.AddCommand(install)
+	image := &cobra.Command{
+		Use:   "image <pack>",
+		Short: "Build the container image of a pack (go, python, jsts, csharp) from the sources embedded in pistos",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			eco, err := config.NormalizeLanguage(args[0])
+			if err != nil {
+				return withCode(ExitError, err)
+			}
+			m, err := plugin.LoadManifest(eco)
+			if err != nil {
+				return withCode(ExitError, err)
+			}
+			rt, err := plugin.NewContainerRuntime()
+			if err != nil {
+				return withCode(ExitError, err)
+			}
+			id, err := rt.Build(cmd.Context(), m)
+			if err != nil {
+				return withCode(ExitError, err)
+			}
+			fmt.Fprintf(a.stdout, "%s %s\n", plugin.ImageTag(m), id)
+			return nil
+		},
+	}
+	cmd.AddCommand(install, image)
 	return cmd
 }

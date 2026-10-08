@@ -177,3 +177,32 @@ Limitations:
 - Token budgets are enforced per request (`max_tokens`) and on evidence size, not as a cumulative spend limit.
 - Evidence is whole changed files; there is no chunking for very large changes (excess files are listed as omitted).
 - The AI quality metrics of section 10 (recall, precision, singleton yield…) are not measured yet (milestone 8).
+
+## Milestone 7 — Docker, portable release artifacts and reporting
+
+Scope: Docker execution and image recipes, SARIF export, core/per-language artifacts, installation
+documentation, CI/release definitions, trusted and restricted profiles.
+Planned tests: SARIF schema validation and file mapping; restricted docker arguments; native vs
+container equivalence per ecosystem; images exclude unrelated runtimes; restricted profile observed
+from inside a container; container removal on cancellation; complete image running the core under
+`--network none`; path normalization; Windows process-tree kill.
+
+Verified live (Linux arm64, Docker 29.2.1): images built from digest-pinned bases; native and
+restricted-container reviews give identical canonical issues and verdicts for Go, Python, JS/TS and C#;
+the complete Go image reproduces the native result offline.
+
+- [x] `--format sarif` (2.1.0): rules, partial fingerprints, baseline state, external suppressions, `%SRCROOT%`-relative URIs; validated against the official OASIS schema with jsonschema
+- [x] Per-pack Dockerfiles (Go multi-stage on debian-slim, Python+Node, Node+oxc/oxlint, .NET SDK+Roslyn worker+csharp-ls), base images pinned by digest; `plugins image <pack>`
+- [x] `execution.mode = "docker"`: image IDs locked, tools resolved/probed inside images, analyzers and workers run via `docker run -i` with identical mount paths
+- [x] Restricted profile (no network, non-root, read-only rootfs, cap-drop ALL, no-new-privileges, pids/memory/cpu limits, no secrets); trusted profile
+- [x] Container cleanup on cancellation/timeout (`docker rm -f`), tested
+- [x] Complete images (`docker/full.Dockerfile`, `PISTOS_IN_IMAGE=1`) running the core directly; tested offline
+- [x] `scripts/release.sh`: static binaries for linux/darwin/windows × amd64/arm64 with SHA256SUMS
+- [x] CI: core matrix (Linux/macOS/Windows), live packs, docker job; release workflow uploading artifacts only — defined, not executed here
+- [x] Path normalization tests (Windows branches run on the Windows CI leg); Windows process-tree test (compile-checked only)
+- [x] Installation and security documentation
+
+Limitations:
+- macOS/Windows execution of tests and the Windows taskkill path have not been run in this environment.
+- `pistos facts` runs natively only; the host virtualenv is not used in docker mode.
+- Pack images are built locally from pinned bases; apt/npm/pip layers make image IDs differ between builds, so the lock pins the built ID per machine.

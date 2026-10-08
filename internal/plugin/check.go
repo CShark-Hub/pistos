@@ -53,6 +53,8 @@ type Invocation struct {
 	Vars map[string]string
 	// RepoRoot is the project's repository-relative root; facts paths are reported relative to the repository.
 	RepoRoot string
+	// Container runs the command inside the pack image instead of on the host.
+	Container *ContainerSpec
 }
 
 type TreeScope struct {
@@ -93,16 +95,24 @@ func (inv Invocation) Command() runner.Cmd {
 		}
 	}
 	env := map[string]string{}
-	for _, kv := range BaseEnv(inv.Manifest.EnvPassthrough) {
-		k, v, _ := strings.Cut(kv, "=")
-		env[k] = v
-	}
-	var pathDirs []string
-	for _, u := range inv.Uses {
-		pathDirs = append(pathDirs, filepath.Dir(u.Path))
-	}
-	if len(pathDirs) > 0 {
-		env["PATH"] = strings.Join(append(pathDirs, env["PATH"]), string(os.PathListSeparator))
+	if inv.Container != nil {
+		// Host paths such as HOME or PATH mean nothing inside the image.
+		env["HOME"], env["TMPDIR"] = "/tmp/home", "/tmp"
+		for k, v := range inv.Container.Env {
+			env[k] = v
+		}
+	} else {
+		for _, kv := range BaseEnv(inv.Manifest.EnvPassthrough) {
+			k, v, _ := strings.Cut(kv, "=")
+			env[k] = v
+		}
+		var pathDirs []string
+		for _, u := range inv.Uses {
+			pathDirs = append(pathDirs, filepath.Dir(u.Path))
+		}
+		if len(pathDirs) > 0 {
+			env["PATH"] = strings.Join(append(pathDirs, env["PATH"]), string(os.PathListSeparator))
+		}
 	}
 	for k, v := range c.Env {
 		if ev, ok := inv.expand(v); ok {
@@ -128,7 +138,11 @@ func (inv Invocation) Command() runner.Cmd {
 			}
 		}
 	}
-	return runner.Cmd{Path: path, Args: args, Dir: inv.ProjectDir, Env: envList, Timeout: inv.Timeout}
+	cmd := runner.Cmd{Path: path, Args: args, Dir: inv.ProjectDir, Env: envList, Timeout: inv.Timeout}
+	if inv.Container != nil {
+		return inv.Container.Wrap(cmd)
+	}
+	return cmd
 }
 
 // Execute runs the check and classifies the outcome. Only a recognized exit code with parsable
@@ -258,6 +272,13 @@ func executeFacts(ctx context.Context, inv Invocation) (Parsed, finding.Status, 
 		}
 		if c.Facts == "metrics" {
 			f.Imports = nil
+			var kept []string
+			for _, l := range limits {
+				if strings.Contains(l, "syntax errors") {
+					kept = append(kept, l)
+				}
+			}
+			limits = kept
 		} else {
 			f.Functions = nil
 		}
