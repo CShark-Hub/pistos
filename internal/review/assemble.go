@@ -122,11 +122,28 @@ func Finalize(rep *finding.Report, blockOn string, apply func([]finding.Issue)) 
 		}
 	}
 
+	if rep.AI != nil {
+		ignored := map[string]bool{}
+		for _, is := range rep.Issues {
+			if is.AI != nil && is.Disposition.State == finding.DispSuppressed {
+				ignored[is.Key] = true
+			}
+		}
+		for i := range rep.AI.Candidates {
+			c := &rep.AI.Candidates[i]
+			c.Ignored = c.Cluster != "" && ignored[c.Cluster]
+		}
+	}
+
 	var incomplete []string
 	for _, c := range rep.Coverage.Capabilities {
 		if c.Required && !c.Status.Completed() {
 			incomplete = append(incomplete, fmt.Sprintf("%s/%s (%s)", c.Project, c.Capability, c.Status))
 		}
+	}
+	// ai.required makes an incomplete AI plan an incomplete review; AI issues still never block.
+	if rep.AI != nil && rep.AI.Required && rep.AI.Status != finding.StatusComplete {
+		incomplete = append(incomplete, "ai (required, "+string(rep.AI.Status)+")")
 	}
 	sort.Strings(incomplete)
 	v := finding.Verdict{Blocking: blocking}

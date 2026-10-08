@@ -96,8 +96,23 @@ type Finding struct {
 	Capability   string   `json:"capability"`
 	Reproduce    []string `json:"reproduce,omitempty"`
 	// Advisory findings are reported but never block the gate (e.g. metrics without a gate rule).
-	Advisory bool         `json:"advisory,omitempty"`
-	Metric   *MetricValue `json:"metric,omitempty"`
+	Advisory bool          `json:"advisory,omitempty"`
+	Metric   *MetricValue  `json:"metric,omitempty"`
+	AI       *AIProvenance `json:"ai,omitempty"`
+}
+
+// AIProvenance records how an AI issue was found and assessed. Votes are provenance, not confidence.
+type AIProvenance struct {
+	Outcome         string   `json:"outcome"`
+	Cluster         string   `json:"cluster"`
+	Passes          []string `json:"passes"`
+	Models          []string `json:"models"`
+	Assumptions     []string `json:"assumptions,omitempty"`
+	Impact          string   `json:"impact,omitempty"`
+	FailingScenario string   `json:"failing_scenario,omitempty"`
+	TriageReason    string   `json:"triage_reason,omitempty"`
+	// Carried explains why an issue is present without being rediscovered in this run.
+	Carried string `json:"carried,omitempty"`
 }
 
 // MetricValue records a measured value so baseline comparison can detect worsening, not just presence.

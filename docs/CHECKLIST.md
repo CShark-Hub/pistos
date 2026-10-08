@@ -149,3 +149,31 @@ Limitations:
 - Import graphs ignore Go build constraints, Python `sys.path` changes, tsconfig path aliases, package
   `exports`, C# fully qualified names and reflection.
 - Cognitive complexity and duplication detection are not implemented.
+
+## Milestone 6 — BYOK discovery and union triage
+
+Scope: backend/model aliases, one-/three-pass configurations, structured independent discovery, union
+clustering, optional model triage, usage/budgets, feedback context, replay and refresh lifecycle.
+Planned tests (fake HTTP server): A, B, A+C union with merged provenance and a surviving singleton;
+model triage rejection with audit; failed pass is not a clean vote (bounded retries, `ai.required`);
+tag refilter and replay with zero calls; refreshed omission and rewording keep identity; no-change
+makes no calls; prompt-injection/output cannot change decisions or run commands; keys never persist
+or leak; offline replay vs. offline miss; opt-in live test.
+
+- [x] OpenAI-compatible provider: per-endpoint concurrency, timeouts, bounded retries, usage, key redaction, HTTPS-or-local endpoints
+- [x] Bundled prompts (`discover.md`, `triage.md`) with `.pistos/prompts/` overrides; repository content marked untrusted
+- [x] Independent concurrent passes over one captured evidence snapshot (budgeted), feedback context included
+- [x] Candidate validation (anchors, evidence refs, required fields, budget) with rejected reasons
+- [x] Union by issue identity; every raw candidate keeps cluster and outcome; duplicates recorded
+- [x] Evidence and model triage (neutral ids, no identities/votes), refuted → rejected, unresolved → needs-investigation, deterministic corroboration → verified
+- [x] Advisory AI issues with provenance; never blocking; `ai.required` only affects completeness
+- [x] Raw call artifacts with exact messages; replay with zero calls (also offline); `--refresh-ai`
+- [x] Lifecycle ledger: omission keeps accepted issues; carried across snapshots while the anchor exists
+- [x] AI issues accept feedback decisions; candidates marked ignored on publication
+- [x] Live run recorded against a local model (gemma-4-31B-it via SGLang); no hosted model exercised
+
+Limitations:
+- One backend shape (OpenAI-compatible); native provider adapters are not implemented.
+- Token budgets are enforced per request (`max_tokens`) and on evidence size, not as a cumulative spend limit.
+- Evidence is whole changed files; there is no chunking for very large changes (excess files are listed as omitted).
+- The AI quality metrics of section 10 (recall, precision, singleton yield…) are not measured yet (milestone 8).

@@ -122,6 +122,16 @@ func printIssue(w io.Writer, n int, is finding.Issue) {
 		}
 	}
 	fmt.Fprintf(w, "         %s · %s%s · key %s\n", is.Family, strings.Join(tools, " "), extra, is.Key)
+	if is.AI != nil {
+		fmt.Fprintf(w, "         ai: %s by %s (models %s)", is.AI.Outcome, strings.Join(is.AI.Passes, ","), strings.Join(is.AI.Models, ","))
+		if is.AI.TriageReason != "" {
+			fmt.Fprintf(w, " — %s", is.AI.TriageReason)
+		}
+		fmt.Fprintln(w)
+		if is.AI.Carried != "" {
+			fmt.Fprintf(w, "         %s\n", is.AI.Carried)
+		}
+	}
 	if is.Disposition.Note != "" {
 		fmt.Fprintf(w, "         note: %s\n", is.Disposition.Note)
 	}

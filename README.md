@@ -42,6 +42,10 @@ and `imports` (dependency cycles and layer rules, [docs/rules.md](docs/rules.md)
 semantic queries through language servers: `pistos facts references svc/main.go:12:9`
 ([docs/lsp.md](docs/lsp.md)).
 
+Optional BYOK AI review (`--profile thorough`) runs independent discovery passes against any
+OpenAI-compatible endpoint, unions and triages their candidates and publishes advisory issues with
+provenance; see [docs/ai.md](docs/ai.md).
+
 ## Module path
 
 The Go module path `example.com/pistos` is a placeholder until the publishing identity is decided.

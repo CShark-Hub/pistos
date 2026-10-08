@@ -36,6 +36,8 @@ type Options struct {
 	Jobs    int
 	// Progress receives human-readable progress lines; nil discards them.
 	Progress func(string)
+	// RefreshAI bypasses recorded model responses and runs fresh discovery.
+	RefreshAI bool
 	// FeedbackFromBase applies the decisions committed in the baseline instead of the working copy,
 	// so an analyzed change cannot exempt itself.
 	FeedbackFromBase bool
@@ -142,8 +144,8 @@ func Run(ctx context.Context, o Options) (*finding.Envelope, error) {
 
 	rep := &finding.Report{Schema: finding.SchemaVersion, Scope: scope}
 	rep.Coverage = finding.Coverage{Profile: o.Profile, AI: string(finding.StatusNotRequested)}
-	if cfg.AI.Enabled {
-		rep.Coverage.AI = "unsupported: AI discovery is not available in this build"
+	if cfg.AI.Enabled && o.Profile != "thorough" {
+		rep.Coverage.AI = "not-requested (AI discovery runs with --profile thorough)"
 	}
 
 	if !scope.Empty {
@@ -166,6 +168,18 @@ func Run(ctx context.Context, o Options) (*finding.Envelope, error) {
 	if err != nil {
 		return nil, &ConfigError{err}
 	}
+	var aiTelemetry []finding.AICallTelemetry
+	if cfg.AI.Enabled && o.Profile == "thorough" && !scope.Empty && len(projects) > 0 {
+		out, err := e.runAI(ctx, scope, changes, projects, rep.Issues, fb)
+		if err != nil {
+			return nil, err
+		}
+		rep.AI, aiTelemetry = out.Report, out.Telemetry
+		rep.Coverage.AI = aiSummary(out.Report)
+		for _, f := range out.Findings {
+			rep.Issues = append(rep.Issues, finding.Issue{Finding: f, Change: ChangeNew})
+		}
+	}
 	if note != "" {
 		rep.Coverage.Capabilities = append(rep.Coverage.Capabilities, finding.CapabilityResult{
 			Capability: "feedback-policy", Project: "-", Side: sideHead, Status: finding.StatusComplete, Limitations: []string{note},
@@ -179,6 +193,7 @@ func Run(ctx context.Context, o Options) (*finding.Envelope, error) {
 	env.Telemetry = finding.Telemetry{StartedAt: started.UTC().Format(time.RFC3339), DurationMS: time.Since(started).Milliseconds(), Jobs: o.Jobs}
 	sort.Slice(e.telemetry, func(i, j int) bool { return e.telemetry[i].Task < e.telemetry[j].Task })
 	env.Telemetry.Tasks = e.telemetry
+	env.Telemetry.AI = aiTelemetry
 
 	ledger := e.store.LoadLedger()
 	env.Numbers = ledger.AssignAll(rep.Issues, scope.HeadTree)

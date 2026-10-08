@@ -110,8 +110,9 @@ type AITriage struct {
 }
 
 type AIBudget struct {
-	MaxCandidates int `toml:"max_candidates"`
-	MaxTokens     int `toml:"max_tokens"`
+	MaxCandidates    int `toml:"max_candidates"`
+	MaxTokens        int `toml:"max_tokens"`
+	MaxEvidenceChars int `toml:"max_evidence_chars"`
 }
 
 type ModelAlias struct {
@@ -211,6 +212,9 @@ func (c *Config) applyDefaults() {
 	if c.AI.ReuseResults == nil {
 		t := true
 		c.AI.ReuseResults = &t
+	}
+	if c.AI.Budget.MaxEvidenceChars == 0 {
+		c.AI.Budget.MaxEvidenceChars = 200_000
 	}
 	if c.AI.Triage.Mode == "" {
 		c.AI.Triage.Mode = "evidence"

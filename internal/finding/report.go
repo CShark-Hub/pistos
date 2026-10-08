@@ -86,12 +86,14 @@ type Issue struct {
 	Blocking    bool        `json:"blocking"`
 }
 
-// Candidate is an unverified AI discovery before triage.
+// Candidate is one raw AI discovery. Every candidate keeps its cluster and outcome for audit,
+// including rejected and duplicate ones.
 type Candidate struct {
 	ID              string     `json:"id"`
 	Pass            string     `json:"pass"`
 	ModelAlias      string     `json:"model_alias"`
 	Family          string     `json:"family"`
+	Severity        Severity   `json:"severity"`
 	Anchors         []Location `json:"anchors"`
 	Hypothesis      string     `json:"hypothesis"`
 	Assumptions     []string   `json:"assumptions"`
@@ -100,6 +102,37 @@ type Candidate struct {
 	EvidenceRefs    []string   `json:"evidence_refs,omitempty"`
 	Cluster         string     `json:"cluster,omitempty"`
 	Outcome         string     `json:"outcome,omitempty"`
+	Reason          string     `json:"reason,omitempty"`
+	// Ignored is recomputed from feedback on every publication; Outcome stays the triage result.
+	Ignored bool `json:"ignored,omitempty"`
+}
+
+// AI outcomes. Only trusted deterministic evidence can make a candidate verified.
+const (
+	OutcomeVerified           = "verified"
+	OutcomeSupported          = "supported"
+	OutcomeNeedsInvestigation = "needs-investigation"
+	OutcomeRejected           = "rejected"
+	OutcomeDuplicate          = "duplicate"
+	OutcomeIgnored            = "ignored"
+)
+
+type AIPassStatus struct {
+	ID         string `json:"id"`
+	Model      string `json:"model"`
+	Status     Status `json:"status"`
+	Error      string `json:"error,omitempty"`
+	Candidates int    `json:"candidates"`
+}
+
+// AIReport is the AI coverage of a review, kept apart from the deterministic verdict.
+type AIReport struct {
+	Status     Status         `json:"status"`
+	Required   bool           `json:"required"`
+	Passes     []AIPassStatus `json:"passes"`
+	Triage     AIPassStatus   `json:"triage"`
+	Candidates []Candidate    `json:"candidates"`
+	Notes      []string       `json:"notes,omitempty"`
 }
 
 type Scope struct {
@@ -130,12 +163,13 @@ type Coverage struct {
 
 // Report is the canonical, byte-comparable review result. Volatile data lives in Envelope.
 type Report struct {
-	Schema   int      `json:"schema"`
-	Scope    Scope    `json:"scope"`
-	Verdict  Verdict  `json:"verdict"`
-	Coverage Coverage `json:"coverage"`
-	Issues   []Issue  `json:"issues"`
-	Feedback string   `json:"feedback_hash"`
+	Schema   int       `json:"schema"`
+	Scope    Scope     `json:"scope"`
+	Verdict  Verdict   `json:"verdict"`
+	Coverage Coverage  `json:"coverage"`
+	Issues   []Issue   `json:"issues"`
+	Feedback string    `json:"feedback_hash"`
+	AI       *AIReport `json:"ai,omitempty"`
 }
 
 type Envelope struct {
@@ -145,10 +179,21 @@ type Envelope struct {
 }
 
 type Telemetry struct {
-	StartedAt  string          `json:"started_at"`
-	DurationMS int64           `json:"duration_ms"`
-	Jobs       int             `json:"jobs"`
-	Tasks      []TaskTelemetry `json:"tasks,omitempty"`
+	StartedAt  string            `json:"started_at"`
+	DurationMS int64             `json:"duration_ms"`
+	Jobs       int               `json:"jobs"`
+	Tasks      []TaskTelemetry   `json:"tasks,omitempty"`
+	AI         []AICallTelemetry `json:"ai,omitempty"`
+}
+
+// AICallTelemetry is volatile: replays and retries change it without changing the canonical report.
+type AICallTelemetry struct {
+	Call             string `json:"call"`
+	Cached           bool   `json:"cached"`
+	Attempts         int    `json:"attempts"`
+	PromptTokens     int    `json:"prompt_tokens"`
+	CompletionTokens int    `json:"completion_tokens"`
+	DurationMS       int64  `json:"duration_ms"`
 }
 
 type TaskTelemetry struct {
@@ -176,6 +221,10 @@ func (r *Report) Normalize() {
 		caps[i].Findings = nil
 		caps[i].Facts = nil
 		sort.Strings(caps[i].Limitations)
+	}
+	if r.AI != nil {
+		sort.SliceStable(r.AI.Candidates, func(i, j int) bool { return r.AI.Candidates[i].ID < r.AI.Candidates[j].ID })
+		sort.SliceStable(r.AI.Passes, func(i, j int) bool { return r.AI.Passes[i].ID < r.AI.Passes[j].ID })
 	}
 	sort.SliceStable(r.Issues, func(i, j int) bool {
 		a, b := r.Issues[i], r.Issues[j]
