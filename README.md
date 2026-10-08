@@ -25,6 +25,18 @@ required checks, `130` cancelled.
 Language selection accepts aliases: `go`/`golang`, `py`/`python`, `js`/`ts`/`javascript`/`typescript`,
 `cs`/`csharp`/`"c#"` (quote `c#`, otherwise most shells treat `#` as a comment).
 
+## Language packs
+
+| Pack | Checks | Notes |
+|---|---|---|
+| Go | `go vet`, Staticcheck | [docs/packs/go.md](docs/packs/go.md) |
+| Python | Ruff, Pyright / basedpyright | [docs/packs/python.md](docs/packs/python.md) |
+| JS/TS | tsc (repository version), ESLint, Oxlint | [docs/packs/jsts.md](docs/packs/jsts.md) |
+| C# | `dotnet build` + Roslyn analyzers (SARIF) | [docs/packs/csharp.md](docs/packs/csharp.md) |
+
+Packs activate only for projects affected by a change; tools are locked in `.pistos/lock.json` and
+never installed or upgraded by `review`. Decisions are documented in [docs/feedback.md](docs/feedback.md).
+
 ## Module path
 
 The Go module path `example.com/pistos` is a placeholder until the publishing identity is decided.

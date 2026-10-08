@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strings"
 	"time"
@@ -63,8 +64,13 @@ func Install(ctx context.Context, cfg *config.Config, lock *config.Lock, o Insta
 			return nil, err
 		}
 		for _, check := range p.Checks {
-			if _, ok := m.Checks[check]; !ok {
+			c, ok := m.Checks[check]
+			if !ok {
 				return nil, fmt.Errorf("project %s: pack %s has no check %q", p.ID, eco, check)
+			}
+			if c.Unsupported != "" {
+				log(fmt.Sprintf("%s: %s is unsupported: %s", p.ID, check, c.Unsupported))
+				continue
 			}
 			for _, tool := range m.ToolsFor(check) {
 				dir := filepath.Join(o.Repo, filepath.FromSlash(p.Root))
@@ -161,11 +167,11 @@ func recordLock(lock *config.Lock, rt ResolvedTool, locked bool) error {
 
 func acquire(ctx context.Context, tb *Toolbox, m *Manifest, tool, projectDir string) error {
 	a := m.Tools[tool].Acquire
-	bin, err := ManagedBin(m.Name, tool, a.Version)
+	root, err := ManagedRoot(m.Name, tool, a.Version)
 	if err != nil {
 		return err
 	}
-	if err := os.MkdirAll(bin, 0o755); err != nil {
+	if err := os.MkdirAll(root, 0o755); err != nil {
 		return err
 	}
 	switch a.Method {
@@ -174,7 +180,35 @@ func acquire(ctx context.Context, tb *Toolbox, m *Manifest, tool, projectDir str
 		if err != nil {
 			return fmt.Errorf("go-install needs the Go toolchain: %w", err)
 		}
-		return runAcquire(ctx, goTool.Path, []string{"install", a.Package + "@" + a.Version}, "", acquisitionEnv("GOBIN="+bin, "GOTOOLCHAIN=local", "CGO_ENABLED=0"))
+		return runAcquire(ctx, goTool.Path, []string{"install", a.Package + "@" + a.Version}, "",
+			acquisitionEnv("GOBIN="+filepath.Join(root, "bin"), "GOTOOLCHAIN=local", "CGO_ENABLED=0"))
+	case "npm":
+		node, err := tb.Identify(ctx, m, "node", projectDir)
+		if err != nil {
+			return fmt.Errorf("npm acquisition needs Node.js: %w", err)
+		}
+		npm := filepath.Join(filepath.Dir(node.Path), "npm")
+		if runtime.GOOS == "windows" {
+			npm += ".cmd"
+		}
+		pkg, _, _ := strings.Cut(a.Package, ":")
+		// Install scripts are disabled: acquisition must not execute arbitrary package code.
+		return runAcquire(ctx, npm, []string{"install", "--prefix", root, "--no-save", "--ignore-scripts", "--no-audit", "--no-fund", pkg + "@" + a.Version}, root,
+			acquisitionEnv("PATH="+filepath.Dir(node.Path)+string(os.PathListSeparator)+os.Getenv("PATH")))
+	case "pip":
+		python, err := tb.Identify(ctx, m, "python", projectDir)
+		if err != nil {
+			return fmt.Errorf("pip acquisition needs Python: %w", err)
+		}
+		venv := filepath.Join(root, "venv")
+		if err := runAcquire(ctx, python.Path, []string{"-m", "venv", venv}, root, acquisitionEnv()); err != nil {
+			return err
+		}
+		pip := filepath.Join(venv, "bin", "pip")
+		if runtime.GOOS == "windows" {
+			pip = filepath.Join(venv, "Scripts", "pip.exe")
+		}
+		return runAcquire(ctx, pip, []string{"install", "--disable-pip-version-check", "--no-input", a.Package + "==" + a.Version}, root, acquisitionEnv())
 	default:
 		return fmt.Errorf("unsupported acquisition method %q", a.Method)
 	}

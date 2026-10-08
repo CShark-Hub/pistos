@@ -49,15 +49,21 @@ func CacheRoot() (string, error) {
 	return filepath.Join(d, "pistos"), nil
 }
 
-func ManagedBin(pack, tool, version string) (string, error) {
+// ManagedRoot is where `plugins install` places an acquired tool version.
+func ManagedRoot(pack, tool, version string) (string, error) {
+	if d := os.Getenv("PISTOS_TOOLS_DIR"); d != "" {
+		return filepath.Join(d, pack, tool, version), nil
+	}
 	root, err := CacheRoot()
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(root, "tools", pack, tool, version, "bin"), nil
+	return filepath.Join(root, "tools", pack, tool, version), nil
 }
 
 // Locate finds a tool executable following the manifest's lookup order without running it.
+// Lookup entries: "path", "managed", "repo:<dir>" (project dir, then repository root) and
+// "node-package:<package>:<bin>" (the package's JS entry point in node_modules, project dir upwards).
 func Locate(m *Manifest, name, repo, projectDir string) (path, source string, err error) {
 	t, ok := m.Tools[name]
 	if !ok {
@@ -71,14 +77,7 @@ func Locate(m *Manifest, name, repo, projectDir string) (path, source string, er
 				return abs, "path", nil
 			}
 		case l == "managed":
-			if t.Acquire == nil {
-				continue
-			}
-			dir, err := ManagedBin(m.Name, name, t.Acquire.Version)
-			if err != nil {
-				continue
-			}
-			if p, ok := executableIn(dir, t.Command); ok {
+			if p, ok := managedPath(m, name); ok {
 				return p, "managed", nil
 			}
 		case strings.HasPrefix(l, "repo:"):
@@ -88,9 +87,73 @@ func Locate(m *Manifest, name, repo, projectDir string) (path, source string, er
 					return p, "repo", nil
 				}
 			}
+		case strings.HasPrefix(l, "node-package:"):
+			pkg, bin, _ := strings.Cut(strings.TrimPrefix(l, "node-package:"), ":")
+			for dir := projectDir; ; dir = filepath.Dir(dir) {
+				if p, ok := nodePackageBin(dir, pkg, bin); ok {
+					return p, "repo", nil
+				}
+				if dir == repo || filepath.Dir(dir) == dir || !strings.HasPrefix(dir, repo) {
+					break
+				}
+			}
 		}
 	}
 	return "", "", fmt.Errorf("%w: %s (searched %s)", ErrNotFound, t.Command, strings.Join(t.Lookup, ", "))
+}
+
+func managedPath(m *Manifest, name string) (string, bool) {
+	t := m.Tools[name]
+	if t.Acquire == nil {
+		return "", false
+	}
+	root, err := ManagedRoot(m.Name, name, t.Acquire.Version)
+	if err != nil {
+		return "", false
+	}
+	switch t.Acquire.Method {
+	case "npm":
+		pkg, bin, _ := strings.Cut(t.Acquire.Package, ":")
+		return nodePackageBin(root, pkg, bin)
+	case "pip":
+		if runtime.GOOS == "windows" {
+			return executableIn(filepath.Join(root, "venv", "Scripts"), t.Command)
+		}
+		return executableIn(filepath.Join(root, "venv", "bin"), t.Command)
+	default:
+		return executableIn(filepath.Join(root, "bin"), t.Command)
+	}
+}
+
+// nodePackageBin resolves a package's declared bin entry so it can be run with node directly,
+// avoiding platform-specific .bin shims.
+func nodePackageBin(dir, pkg, bin string) (string, bool) {
+	pkgDir := filepath.Join(dir, "node_modules", filepath.FromSlash(pkg))
+	b, err := os.ReadFile(filepath.Join(pkgDir, "package.json"))
+	if err != nil {
+		return "", false
+	}
+	var meta struct {
+		Bin json.RawMessage `json:"bin"`
+	}
+	if json.Unmarshal(b, &meta) != nil {
+		return "", false
+	}
+	var entry string
+	var bins map[string]string
+	if json.Unmarshal(meta.Bin, &bins) == nil {
+		entry = bins[bin]
+	} else {
+		_ = json.Unmarshal(meta.Bin, &entry)
+	}
+	if entry == "" {
+		return "", false
+	}
+	p := filepath.Join(pkgDir, filepath.FromSlash(entry))
+	if fi, err := os.Stat(p); err != nil || fi.IsDir() {
+		return "", false
+	}
+	return p, true
 }
 
 func executableIn(dir, command string) (string, bool) {
@@ -108,10 +171,9 @@ func executableIn(dir, command string) (string, bool) {
 }
 
 // ProbeVersion runs the tool's version command with a minimal environment.
-func ProbeVersion(ctx context.Context, t Tool, path string, env []string) (string, error) {
-	args := t.VersionArgs
-	exe := path
-	res, err := runner.Run(ctx, runner.Cmd{Path: exe, Args: args, Env: env, Timeout: 30 * time.Second, MaxOutput: 1 << 20})
+func ProbeVersion(ctx context.Context, t Tool, exe string, prefix, env []string) (string, error) {
+	path := exe
+	res, err := runner.Run(ctx, runner.Cmd{Path: exe, Args: append(prefix, t.VersionArgs...), Env: env, Timeout: 30 * time.Second, MaxOutput: 1 << 20})
 	if err != nil {
 		return "", err
 	}
@@ -190,7 +252,15 @@ func (tb *Toolbox) Identify(ctx context.Context, m *Manifest, name, projectDir s
 	e, ok := tb.cache.Entries[real]
 	tb.cache.mu.Unlock()
 	if !ok || e.Size != fi.Size() || e.ModTime != fi.ModTime().UnixNano() {
-		version, err := ProbeVersion(ctx, m.Tools[name], path, tb.Env)
+		exe, args := path, []string(nil)
+		if rt := m.Tools[name].Runtime; rt != "" {
+			r, err := tb.Identify(ctx, m, rt, projectDir)
+			if err != nil {
+				return ResolvedTool{}, fmt.Errorf("%s needs %s: %w", name, rt, err)
+			}
+			exe, args = r.Path, []string{path}
+		}
+		version, err := ProbeVersion(ctx, m.Tools[name], exe, args, tb.Env)
 		if err != nil {
 			return ResolvedTool{}, err
 		}

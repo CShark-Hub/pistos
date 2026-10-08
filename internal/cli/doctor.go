@@ -55,8 +55,14 @@ func (a *app) doctorTools(repo string, cfg *config.Config, lock *config.Lock) er
 			return withCode(ExitError, err)
 		}
 		for _, check := range p.Checks {
-			if _, ok := m.Checks[check]; !ok {
+			c, ok := m.Checks[check]
+			if !ok {
 				fmt.Fprintf(a.stdout, "✗ %s: unknown check %q\n", p.ID, check)
+				problems++
+				continue
+			}
+			if c.Unsupported != "" {
+				fmt.Fprintf(a.stdout, "✗ %s: %s is unsupported: %s\n", p.ID, check, c.Unsupported)
 				problems++
 				continue
 			}

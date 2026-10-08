@@ -1,0 +1,76 @@
+{
+  "schema": 1,
+  "name": "python",
+  "version": "0.1.0",
+  "languages": ["python"],
+  "test_paths": ["**/test_*.py", "**/*_test.py", "**/tests/**", "**/test/**", "**/conftest.py"],
+  "options": ["python"],
+  "env_passthrough": [],
+  "shared_inputs": ["pyproject.toml", "ruff.toml", ".ruff.toml", "pyrightconfig.json"],
+  "tools": {
+    "node": {"command": "node", "lookup": ["path"], "version_args": ["--version"], "version_regex": "^v(\\S+)"},
+    "python": {"command": "python3", "lookup": ["path"], "version_args": ["--version"], "version_regex": "Python (\\S+)"},
+    "ruff": {
+      "command": "ruff",
+      "lookup": ["repo:.venv/bin", "repo:venv/bin", "managed"],
+      "version_args": ["--version"],
+      "version_regex": "ruff (\\S+)",
+      "acquire": {"method": "pip", "package": "ruff", "version": "0.16.10"}
+    },
+    "pyright": {
+      "command": "pyright",
+      "lookup": ["node-package:pyright:pyright", "managed"],
+      "runtime": "node",
+      "version_args": ["--version"],
+      "version_regex": "pyright (\\S+)",
+      "acquire": {"method": "npm", "package": "pyright:pyright", "version": "1.1.414"}
+    },
+    "basedpyright": {
+      "command": "basedpyright",
+      "lookup": ["node-package:basedpyright:basedpyright", "managed"],
+      "runtime": "node",
+      "version_args": ["--version"],
+      "version_regex": "basedpyright (\\S+)",
+      "acquire": {"method": "npm", "package": "basedpyright:basedpyright", "version": "1.40.2"}
+    }
+  },
+  "checks": {
+    "ruff": {
+      "tool": "ruff",
+      "args": ["check", "--output-format", "json", "--no-cache", "."],
+      "format": "ruff-json",
+      "scope": "file",
+      "weight": 1,
+      "exit_codes": {"0": "clean", "1": "findings"}
+    },
+    "pyright": {
+      "tool": "pyright",
+      "args": ["--outputjson", "--threads={jobs}", "--pythonpath={var:python}"],
+      "format": "pyright-json",
+      "scope": "project",
+      "weight": 2,
+      "exit_codes": {"0": "clean", "1": "findings"}
+    },
+    "basedpyright": {
+      "tool": "basedpyright",
+      "args": ["--outputjson", "--threads={jobs}", "--pythonpath={var:python}"],
+      "format": "pyright-json",
+      "scope": "project",
+      "weight": 2,
+      "exit_codes": {"0": "clean", "1": "findings"}
+    },
+    "ty": {"unsupported": "ty is not integrated in python pack 0.1.0; keep pyright/basedpyright or remove ty from checks"},
+    "mypy": {"unsupported": "mypy is not integrated in python pack 0.1.0; keep pyright/basedpyright or remove mypy from checks"}
+  },
+  "aliases": {
+    "ruff/F401": "python/unused-import",
+    "pyright/reportUnusedImport": "python/unused-import",
+    "basedpyright/reportUnusedImport": "python/unused-import",
+    "ruff/F821": "python/undefined-name",
+    "pyright/reportUndefinedVariable": "python/undefined-name",
+    "basedpyright/reportUndefinedVariable": "python/undefined-name",
+    "ruff/invalid-syntax": "python/syntax",
+    "pyright/reportInvalidSyntax": "python/syntax"
+  },
+  "authority": ["pyright", "basedpyright", "ruff"]
+}

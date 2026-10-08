@@ -1,0 +1,69 @@
+{
+  "schema": 1,
+  "name": "jsts",
+  "version": "0.1.0",
+  "languages": ["javascript", "typescript"],
+  "test_paths": ["**/*.test.*", "**/*.spec.*", "**/__tests__/**", "**/test/**", "**/tests/**"],
+  "options": ["tsconfig"],
+  "env_passthrough": [],
+  "shared_inputs": ["tsconfig.base.json", "tsconfig.json", "eslint.config.js", "eslint.config.mjs", "eslint.config.cjs", ".oxlintrc.json", "package.json"],
+  "tools": {
+    "node": {"command": "node", "lookup": ["path"], "version_args": ["--version"], "version_regex": "^v(\\S+)"},
+    "typescript": {
+      "command": "tsc",
+      "lookup": ["node-package:typescript:tsc"],
+      "runtime": "node",
+      "version_args": ["--version"],
+      "version_regex": "Version (\\S+)"
+    },
+    "eslint": {
+      "command": "eslint",
+      "lookup": ["node-package:eslint:eslint"],
+      "runtime": "node",
+      "version_args": ["--version"],
+      "version_regex": "^v(\\S+)"
+    },
+    "oxlint": {
+      "command": "oxlint",
+      "lookup": ["node-package:oxlint:oxlint", "managed"],
+      "runtime": "node",
+      "version_args": ["--version"],
+      "version_regex": "Version: (\\S+)",
+      "acquire": {"method": "npm", "package": "oxlint:oxlint", "version": "1.87.0"}
+    }
+  },
+  "checks": {
+    "tsc": {
+      "tool": "typescript",
+      "args": ["--noEmit", "--pretty", "false", "-p", "{var:tsconfig}"],
+      "format": "tsc-text",
+      "scope": "project",
+      "weight": 2,
+      "exit_codes": {"0": "clean", "1": "findings", "2": "findings"},
+      "limitations": ["project references are checked only when each referenced project is configured as its own pistos project"]
+    },
+    "eslint": {
+      "tool": "eslint",
+      "args": ["--format", "json", "."],
+      "format": "eslint-json",
+      "scope": "file",
+      "weight": 1,
+      "exit_codes": {"0": "clean", "1": "findings"}
+    },
+    "oxlint": {
+      "tool": "oxlint",
+      "args": ["--format", "json", "."],
+      "format": "oxlint-json",
+      "scope": "file",
+      "weight": 1,
+      "exit_codes": {"0": "clean", "1": "findings"}
+    },
+    "biome": {"unsupported": "Biome is not integrated in jsts pack 0.1.0; keep the existing linter outside pistos or select eslint/oxlint explicitly"}
+  },
+  "aliases": {
+    "eslint/no-unused-vars": "js/unused-variable",
+    "oxlint/eslint/no-unused-vars": "js/unused-variable",
+    "eslint/@typescript-eslint/no-unused-vars": "js/unused-variable"
+  },
+  "authority": ["tsc", "eslint", "oxlint"]
+}

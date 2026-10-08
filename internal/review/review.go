@@ -61,6 +61,7 @@ type engine struct {
 	sources   *sourceCache
 	treeRoot  string
 	trees     map[string]*treeOnce
+	files     map[string]map[string]bool
 	treesMu   sync.Mutex
 	telemetry []finding.TaskTelemetry
 	telMu     sync.Mutex
@@ -113,7 +114,9 @@ func Run(ctx context.Context, o Options) (*finding.Envelope, error) {
 	if err != nil {
 		return nil, err
 	}
-	e.treeRoot = filepath.Join(root, "trees")
+	// Trees are grouped per repository because materializations gain repository-specific links to
+	// installed dependencies.
+	e.treeRoot = filepath.Join(root, "trees", fsutil.HashStrings(o.Repo)[:16])
 	e.toolbox = plugin.NewToolbox(o.Repo, e.store.StateDir(), lock, plugin.BaseEnv(nil))
 	defer e.toolbox.Save()
 
@@ -356,7 +359,10 @@ func (e *engine) plan(projects []finding.Project, s finding.Scope) ([]task, []*t
 	for i, t := range tasks {
 		results[i] = &taskResult{task: t}
 		c := e.manifests[t.project.Ecosystem].Checks[t.Capability]
-		if e.opts.Profile == "fast" && c.Scope != "file" {
+		switch {
+		case c.Unsupported != "":
+			results[i].result = finding.CapabilityResult{Status: finding.StatusUnsupported, Error: c.Unsupported}
+		case e.opts.Profile == "fast" && c.Scope != "file":
 			results[i].result = finding.CapabilityResult{Status: finding.StatusNotRequested, Limitations: []string{"project-aware check skipped by the fast profile"}}
 		}
 	}
@@ -368,7 +374,7 @@ func (e *engine) execute(ctx context.Context, tasks []task, results []*taskResul
 	sem := semaphore.NewWeighted(int64(e.opts.Jobs))
 	var wg sync.WaitGroup
 	for i, t := range tasks {
-		if results[i].result.Status == finding.StatusNotRequested {
+		if st := results[i].result.Status; st == finding.StatusNotRequested || st == finding.StatusUnsupported {
 			continue
 		}
 		wg.Add(1)
@@ -431,7 +437,12 @@ func (e *engine) runTask(ctx context.Context, t task) (finding.CapabilityResult,
 		tools = append(tools, rt)
 	}
 
-	key := e.inputKey(ctx, t, m, tools)
+	scratch := filepath.Join(e.store.CacheDir(), "scratch", t.project.ID, t.Capability, t.Side)
+	prep, err := e.prepare(t, workRoot, scratch)
+	if err != nil {
+		return fail(finding.StatusFailed, err)
+	}
+	key := e.inputKey(ctx, t, m, tools, prep.fingerprint)
 	if cached, ok := e.store.GetResult(key); ok {
 		cached.Status = finding.StatusCachedComplete
 		return *cached, true
@@ -440,14 +451,15 @@ func (e *engine) runTask(ctx context.Context, t task) (finding.CapabilityResult,
 	inv := plugin.Invocation{
 		Manifest: m, CheckID: t.Capability, Tool: tools[0], Uses: tools[1:], ProjectDir: projectDir,
 		Options: t.project.Options, Jobs: t.Weight, Timeout: e.cfg.Execution.Timeout.Duration,
-		ScratchDir: filepath.Join(e.store.CacheDir(), "scratch", t.project.ID, t.Capability),
+		ScratchDir: scratch,
 		Tree:       plugin.TreeScope{ID: t.tree, Project: t.project.ID},
+		Vars:       prep.vars,
 	}
 	e.progress("%s: %s", t.ID, tools[0].Path)
 	parsed, status, err := plugin.Execute(ctx, inv)
-	findings, limits := e.normalize(t, m, workRoot, projectDir, parsed.Diagnostics)
+	findings, limits := e.normalize(ctx, t, m, workRoot, projectDir, parsed.Diagnostics)
 	res := finding.CapabilityResult{
-		Status: status, Findings: findings, Limitations: append(append(limits, check.Limitations...), parsed.Limitations...),
+		Status: status, Findings: findings, Limitations: append(append(append(limits, prep.limits...), check.Limitations...), parsed.Limitations...),
 		InputKey: key, Tool: tools[0].Name, ToolVersion: tools[0].Version,
 	}
 	if err != nil {
@@ -460,7 +472,7 @@ func (e *engine) runTask(ctx context.Context, t task) (finding.CapabilityResult,
 }
 
 // inputKey hashes everything the result depends on except the job count, which cannot change findings.
-func (e *engine) inputKey(ctx context.Context, t task, m *plugin.Manifest, tools []plugin.ResolvedTool) string {
+func (e *engine) inputKey(ctx context.Context, t task, m *plugin.Manifest, tools []plugin.ResolvedTool, depsFingerprint string) string {
 	in := finding.InputManifest{
 		Tree:        t.tree,
 		ProjectHash: e.git.ObjectID(ctx, t.tree, t.project.Root),
@@ -505,21 +517,40 @@ func (e *engine) inputKey(ctx context.Context, t task, m *plugin.Manifest, tools
 		Root    string
 		Offline bool
 		Check   string
-	}{in, t.project.ID, t.project.Root, e.opts.Offline, t.Capability})
+		Deps    string
+	}{in, t.project.ID, t.project.Root, e.opts.Offline, t.Capability, depsFingerprint})
 	return fsutil.HashBytes(b)
 }
 
 // normalize maps tool diagnostics onto repository-relative findings with stable identity.
-func (e *engine) normalize(t task, m *plugin.Manifest, workRoot, projectDir string, diags []plugin.Diagnostic) ([]finding.Finding, []string) {
+// Diagnostics in other projects or in files that are not part of the snapshot (build outputs,
+// generated sources, dependencies) are counted but not reported as this project's findings.
+func (e *engine) normalize(ctx context.Context, t task, m *plugin.Manifest, workRoot, projectDir string, diags []plugin.Diagnostic) ([]finding.Finding, []string) {
 	var out []finding.Finding
-	outside := 0
+	outside, otherProject, untracked := 0, 0, 0
 	realRoot, _ := filepath.EvalSymlinks(workRoot)
+	tracked := e.treeFiles(ctx, t.tree)
+	seen := map[string]bool{}
 	for _, d := range diags {
 		rel, ok := repoRelative(d.Path, workRoot, realRoot, projectDir)
 		if !ok {
 			outside++
 			continue
 		}
+		if t.project.Root != "." && !strings.HasPrefix(rel, t.project.Root+"/") {
+			otherProject++
+			continue
+		}
+		if tracked != nil && !tracked[rel] {
+			untracked++
+			continue
+		}
+		// Multi-target builds report the same diagnostic once per target framework.
+		dup := fmt.Sprint(rel, d.Line, d.Column, d.Rule, d.Message)
+		if seen[dup] {
+			continue
+		}
+		seen[dup] = true
 		abs := filepath.Join(workRoot, filepath.FromSlash(rel))
 		src := e.sources.get(abs, t.project.Ecosystem, func() ([]byte, error) { return os.ReadFile(abs) })
 		sev := finding.Severity(d.Severity)
@@ -544,7 +575,27 @@ func (e *engine) normalize(t task, m *plugin.Manifest, workRoot, projectDir stri
 	if outside > 0 {
 		limits = append(limits, fmt.Sprintf("%d diagnostics outside the repository were ignored", outside))
 	}
+	if otherProject > 0 {
+		limits = append(limits, fmt.Sprintf("%d diagnostics in other projects were left to those projects", otherProject))
+	}
+	if untracked > 0 {
+		limits = append(limits, fmt.Sprintf("%d diagnostics in generated or untracked files were ignored", untracked))
+	}
 	return out, limits
+}
+
+func (e *engine) treeFiles(ctx context.Context, tree string) map[string]bool {
+	e.treesMu.Lock()
+	defer e.treesMu.Unlock()
+	if e.files == nil {
+		e.files = map[string]map[string]bool{}
+	}
+	if f, ok := e.files[tree]; ok {
+		return f
+	}
+	f, _ := e.git.Files(ctx, tree)
+	e.files[tree] = f
+	return f
 }
 
 func reproduceCommand(t task, m *plugin.Manifest) string {

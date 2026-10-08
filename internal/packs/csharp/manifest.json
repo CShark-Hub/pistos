@@ -1,0 +1,41 @@
+{
+  "schema": 1,
+  "name": "csharp",
+  "version": "0.1.0",
+  "languages": ["csharp"],
+  "test_paths": ["**/*Tests/**", "**/*.Tests/**", "**/*Test/**", "**/tests/**", "**/test/**", "**/*Tests.cs"],
+  "options": ["configuration", "framework"],
+  "env_passthrough": ["DOTNET_ROOT", "NUGET_PACKAGES"],
+  "shared_inputs": ["Directory.Build.props", "Directory.Build.targets", "Directory.Packages.props", ".editorconfig", "global.json", "NuGet.config", "nuget.config"],
+  "tools": {
+    "dotnet": {"command": "dotnet", "lookup": ["path"], "version_args": ["--version"], "version_regex": "^(\\d\\S*)"}
+  },
+  "checks": {
+    "dotnet-build": {
+      "tool": "dotnet",
+      "args": [
+        "build", "-nologo", "-tl:off", "-nodeReuse:false", "-maxCpuCount:{jobs}", "--no-incremental",
+        "-p:UseSharedCompilation=false",
+        "-p:UseArtifactsOutput=true",
+        "-p:ArtifactsPath={var:artifacts}",
+        "-p:RestoreSources={var:restore_sources}",
+        "-p:CustomBeforeMicrosoftCommonTargets={var:props}",
+        "-p:PistosSarifDir={var:sarif_dir}",
+        "-p:Configuration={opt:configuration}",
+        "-p:TargetFramework={opt:framework}"
+      ],
+      "format": "sarif-artifacts",
+      "artifacts": "{var:sarif_dir}",
+      "scope": "project",
+      "weight": 4,
+      "exit_codes": {"0": "clean", "1": "findings"},
+      "env": {
+        "DOTNET_CLI_TELEMETRY_OPTOUT": "1", "DOTNET_NOLOGO": "1", "DOTNET_SKIP_FIRST_TIME_EXPERIENCE": "1",
+        "MSBUILDDISABLENODEREUSE": "1", "DOTNET_CLI_UI_LANGUAGE": "en"
+      },
+      "limitations": ["rebuilt with --no-incremental into a per-task artifacts path so up-to-date projects still report diagnostics and concurrent builds never share outputs"]
+    }
+  },
+  "aliases": {},
+  "authority": ["dotnet-build"]
+}

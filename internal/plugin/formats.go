@@ -15,6 +15,8 @@ type Output struct {
 	Stdout   []byte
 	Stderr   []byte
 	ExitCode int
+	// Artifacts are the files a tool wrote into its declared artifact directory, in name order.
+	Artifacts [][]byte
 }
 
 // Parsed is normalized analyzer output. Incomplete explains why the covered scope is partial.

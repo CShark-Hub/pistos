@@ -48,6 +48,8 @@ type Invocation struct {
 	Timeout    time.Duration
 	// Tree identifies the snapshot so workers can restate the scope they covered.
 	Tree TreeScope
+	// Vars are values computed by pistos for {var:NAME} placeholders (scratch paths, interpreters).
+	Vars map[string]string
 }
 
 type TreeScope struct {
@@ -55,12 +57,18 @@ type TreeScope struct {
 	Project string
 }
 
-var optPattern = regexp.MustCompile(`\{opt:([a-z_]+)\}`)
+var placeholder = regexp.MustCompile(`\{(opt|var):([a-z_]+)\}`)
 
+// expand fills placeholders; it reports false when any referenced value is empty so the caller can
+// drop the whole argument rather than pass a dangling flag.
 func (inv Invocation) expand(s string) (string, bool) {
 	empty := false
-	s = optPattern.ReplaceAllStringFunc(s, func(m string) string {
-		v := inv.Options[optPattern.FindStringSubmatch(m)[1]]
+	s = placeholder.ReplaceAllStringFunc(s, func(m string) string {
+		sub := placeholder.FindStringSubmatch(m)
+		v := inv.Options[sub[2]]
+		if sub[1] == "var" {
+			v = inv.Vars[sub[2]]
+		}
 		if v == "" {
 			empty = true
 		}
@@ -130,6 +138,17 @@ func Execute(ctx context.Context, inv Invocation) (Parsed, finding.Status, error
 	if c.Format == FormatWorker {
 		return executeWorker(ctx, inv)
 	}
+	artifactDir := ""
+	if c.Artifacts != "" {
+		artifactDir, _ = inv.expand(c.Artifacts)
+		// Stale artifacts from an earlier run must never be read as this run's results.
+		if err := os.RemoveAll(artifactDir); err != nil {
+			return Parsed{}, finding.StatusFailed, err
+		}
+		if err := os.MkdirAll(artifactDir, 0o755); err != nil {
+			return Parsed{}, finding.StatusFailed, err
+		}
+	}
 	res, err := runner.Run(ctx, inv.Command())
 	switch {
 	case res.TimedOut:
@@ -140,7 +159,13 @@ func Execute(ctx context.Context, inv Invocation) (Parsed, finding.Status, error
 		return Parsed{}, finding.StatusFailed, fmt.Errorf("%s: %w", inv.CheckID, err)
 	}
 	_, known := c.ExitCodes[strconv.Itoa(res.ExitCode)]
-	parsed, perr := Parse(c.Format, Output{Stdout: res.Stdout, Stderr: res.Stderr, ExitCode: res.ExitCode})
+	out := Output{Stdout: res.Stdout, Stderr: res.Stderr, ExitCode: res.ExitCode}
+	if artifactDir != "" {
+		if out.Artifacts, err = readArtifacts(artifactDir); err != nil {
+			return Parsed{}, finding.StatusFailed, err
+		}
+	}
+	parsed, perr := Parse(c.Format, out)
 	if !known {
 		msg := fmt.Sprintf("%s exited with unexpected code %d", inv.CheckID, res.ExitCode)
 		if perr != nil {
@@ -193,4 +218,23 @@ func executeWorker(ctx context.Context, inv Invocation) (Parsed, finding.Status,
 		return p, finding.StatusIncomplete, fmt.Errorf("%s: worker reported status %q", inv.CheckID, res.Status)
 	}
 	return p, finding.StatusComplete, nil
+}
+
+func readArtifacts(dir string) ([][]byte, error) {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return nil, err
+	}
+	var out [][]byte
+	for _, e := range entries {
+		if e.IsDir() {
+			continue
+		}
+		b, err := os.ReadFile(filepath.Join(dir, e.Name()))
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, b)
+	}
+	return out, nil
 }

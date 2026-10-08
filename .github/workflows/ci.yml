@@ -29,3 +29,27 @@ jobs:
       - name: Race detector
         if: runner.os == 'Linux'
         run: go test -race ./...
+
+  # Release gate: runs every live pack test against real runtimes; skips are failures here.
+  live-packs:
+    runs-on: ubuntu-latest
+    env:
+      PISTOS_REQUIRE_LIVE: "1"
+      DOTNET_CLI_TELEMETRY_OPTOUT: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.26.9"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24.21.0"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.401"
+      - name: Staticcheck for the live Go test
+        run: go install honnef.co/go/tools/cmd/staticcheck@v0.8.1 && echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+      - run: go test -count=1 ./...

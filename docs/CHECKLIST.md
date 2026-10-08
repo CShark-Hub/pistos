@@ -85,3 +85,34 @@ Limitations:
   path + anchor line + ordinal identity.
 - Two identical anchor lines in one symbol are distinguished only by order (ordinal).
 - Rename verification needs either an unchanged file blob or a locally available origin tree/commit.
+
+## Milestone 4 — JS/TS, Python and C# packs
+
+Scope: real deterministic adapters, installer/lock handling and runtime/backend documentation for
+Python, JS/TS and C#; clean/defective/multi-project fixtures; structured-output normalization tests.
+Planned tests: live findings and clean results per pack, configured backend/rule preservation,
+missing/unsupported tools, mixed-language activation, C# multi-project, multi-target, generated
+sources and no-op rebuild; parser tests from captured outputs.
+
+Verified live (Linux arm64): Python 3.12.3 + Ruff 0.16.10 + Pyright 1.1.414 on Node 24.21.0;
+TypeScript 7.0.2, ESLint 10.12.0, Oxlint 1.87.0; .NET SDK 10.0.401 (net10.0 and net8.0 targets);
+Go 1.26.9 + Staticcheck 0.8.1. Command: `PISTOS_REQUIRE_LIVE=1 go test -race -count=1 ./...` — all pass, no skips.
+
+- [x] Python pack: ruff (repo venv or managed pip), pyright/basedpyright (repo or managed npm, run via node), interpreter detection, site-packages fingerprint
+- [x] Python: ty/mypy selection preserved by init and reported `unsupported` (not substituted)
+- [x] JS/TS pack: repository-selected tsc (TypeScript 7 native verified), ESLint, Oxlint (repo or managed); Biome reported unsupported
+- [x] JS/TS: repository `node_modules` linked into snapshots (race-safe); lockfile/listing fingerprint in cache key
+- [x] C# pack: `dotnet build` with per-project/per-TFM SARIF via injected props, per-task artifacts path, `--no-incremental`, local-only restore
+- [x] Generic filters: other-project diagnostics, generated/untracked files, duplicate multi-TFM diagnostics
+- [x] Acquisition methods `pip` and `npm` (`--ignore-scripts`); node-package lookup via package `bin` entries
+- [x] Unsupported checks skipped by install/doctor with explanation, reported as `unsupported` in review
+- [x] Live tests: findings + clean results (Python), config preservation (ruff extend-select, tsconfig strict, .editorconfig CA1822), ESLint+Oxlint merge, missing repo TypeScript, C# multi-project attribution, multi-target, no-op rebuild, mixed-repo activation
+- [x] Parser tests from captured outputs, incl. sandboxed-ruff silent clean, tsc project errors, SARIF suppressions/unanchored/missing logs
+- [x] Release CI job with `PISTOS_REQUIRE_LIVE=1` (defined; not executed here)
+
+Limitations:
+- Symbols for identity: Go and Python only; JS/TS and C# use path + anchor line + ordinal.
+- basedpyright installed only as a Python package (no npm package) is not located.
+- tsc project references, Biome, ty and mypy are not integrated.
+- C# restore uses only the local package cache; legacy/Windows-only project types are unverified.
+- Windows and macOS execution of the packs has not been run.

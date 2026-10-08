@@ -58,7 +58,11 @@ type Check struct {
 	ExitCodes map[string]string `json:"exit_codes"`
 	Env       map[string]string `json:"env"`
 	// Optional checks report their status but never make the deterministic gate incomplete.
-	Optional    bool     `json:"optional,omitempty"`
+	Optional bool `json:"optional,omitempty"`
+	// Unsupported explains why a selectable backend cannot run yet; selecting it is reported, not ignored.
+	Unsupported string `json:"unsupported,omitempty"`
+	// Artifacts is a directory (template) the tool writes structured results into instead of stdout.
+	Artifacts   string   `json:"artifacts,omitempty"`
 	Limitations []string `json:"limitations,omitempty"`
 }
 
@@ -83,6 +87,9 @@ func ParseManifest(b []byte) (*Manifest, error) {
 	}
 	for _, id := range m.CheckIDs() {
 		c := m.Checks[id]
+		if c.Unsupported != "" {
+			continue
+		}
 		if _, ok := m.Tools[c.Tool]; !ok {
 			return nil, fmt.Errorf("pack %s: check %s uses undeclared tool %q", m.Name, id, c.Tool)
 		}

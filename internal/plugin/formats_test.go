@@ -88,10 +88,12 @@ func TestParseStaticcheckMalformed(t *testing.T) {
 }
 
 func TestBundledManifestsLoad(t *testing.T) {
-	m, err := LoadManifest("go")
-	if err != nil {
-		t.Fatal(err)
+	for _, name := range []string{"go", "python", "jsts", "csharp"} {
+		if _, err := LoadManifest(name); err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
 	}
+	m, _ := LoadManifest("go")
 	if m.Family("staticcheck", "SA5009") != "go-vet/printf" || !m.IsTestPath("pkg/x_test.go") || m.IsTestPath("pkg/x.go") {
 		t.Fatal("aliases or test globs broken")
 	}

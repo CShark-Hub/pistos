@@ -24,7 +24,7 @@ func useGoToolchain(t *testing.T) {
 	}
 	bin := filepath.Join(runtime.GOROOT(), "bin")
 	if _, err := os.Stat(filepath.Join(bin, "go")); err != nil {
-		t.Skip("no Go toolchain available for live Go pack tests")
+		skipLive(t, "no Go toolchain available for live Go pack tests")
 	}
 	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
 }
@@ -287,7 +287,7 @@ func TestCancellationLeavesNoChildren(t *testing.T) {
 // TestStaticcheckLive needs staticcheck on PATH built for a compatible Go toolchain.
 func TestStaticcheckLive(t *testing.T) {
 	if _, err := exec.LookPath("staticcheck"); err != nil {
-		t.Skip("staticcheck not on PATH; live staticcheck coverage skipped")
+		skipLive(t, "staticcheck not on PATH; live staticcheck coverage skipped")
 	}
 	cfg := strings.Replace(configFor(goProject), `checks = ["go-vet"]`, `checks = ["go-vet", "staticcheck"]`, 1)
 	r := setupGo(t, "go-clean", cfg)

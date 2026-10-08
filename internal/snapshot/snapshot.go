@@ -172,6 +172,21 @@ func (g Git) ObjectID(ctx context.Context, tree, p string) string {
 	return id
 }
 
+// Files lists every blob path in tree.
+func (g Git) Files(ctx context.Context, tree string) (map[string]bool, error) {
+	out, err := g.run(ctx, nil, nil, "ls-tree", "-r", "-z", "--name-only", tree)
+	if err != nil {
+		return nil, err
+	}
+	files := map[string]bool{}
+	for _, f := range strings.Split(string(out), "\x00") {
+		if f != "" {
+			files[f] = true
+		}
+	}
+	return files, nil
+}
+
 // Exists reports whether an object is present locally (trees from old working snapshots may be pruned).
 func (g Git) Exists(ctx context.Context, id string) bool {
 	_, err := g.run(ctx, nil, nil, "cat-file", "-e", id)

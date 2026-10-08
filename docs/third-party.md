@@ -19,4 +19,11 @@ Pistos does not redistribute analyzers. Packs locate tools that the repository a
 | Tool | Pack | License | Acquisition |
 |---|---|---|---|
 | Go toolchain (`go vet`, compiler) | go | BSD-3-Clause | user-installed toolchain |
-| Staticcheck | go | MIT | `go install` by `pistos plugins install` |
+| Staticcheck 0.8.1 | go | MIT | `go install` by `pistos plugins install` |
+| Ruff 0.16.10 | python | MIT | repository venv, or `pip install` into a managed venv |
+| Pyright 1.1.414 / basedpyright 1.40.2 | python | MIT | repository `node_modules`, or managed `npm install --ignore-scripts` |
+| Node.js | python, jsts | MIT | user-installed runtime |
+| TypeScript | jsts | Apache-2.0 | repository `node_modules` only |
+| ESLint | jsts | MIT | repository `node_modules` only |
+| Oxlint 1.87.0 | jsts | MIT | repository `node_modules`, or managed `npm install --ignore-scripts` |
+| .NET SDK (Roslyn, analyzers) | csharp | MIT | user-installed SDK |
