@@ -100,3 +100,8 @@ PISTOS_LIVE_AI_ENDPOINT=http://localhost:8000/v1 PISTOS_LIVE_AI_MODEL=<model-id>
 Recorded run (8 October 2026): local SGLang serving `google/gemma-4-31B-it`, one pass, 81 s; it reported
 the seeded out-of-bounds loop and nil dereference (both `supported`) and ignored the prompt-injection
 comment in the fixture. No hosted/paid model has been exercised.
+
+Variant comparison (`docs/benchmarks/ai-results.md`): on a 7-defect labeled corpus with the same local
+model, one pass, three same-model passes and three passes with model triage all reached recall 0.71 and
+precision 1.00. At temperature 0, repeating the same model adds cost but no diversity, so prefer
+different models (or prompts) per pass when the budget allows three passes.

@@ -15,18 +15,13 @@ import (
 	"example.com/pistos/internal/testutil/gitrepo"
 )
 
-// useGoToolchain puts a real Go toolchain on PATH and isolates the machine-wide pistos cache.
+// useGoToolchain requires a Go toolchain on PATH and isolates the machine-wide pistos cache.
 func useGoToolchain(t *testing.T) {
 	t.Helper()
 	t.Setenv("PISTOS_CACHE_DIR", t.TempDir())
-	if _, err := exec.LookPath("go"); err == nil {
-		return
+	if _, err := exec.LookPath("go"); err != nil {
+		skipLive(t, "no Go toolchain on PATH for live Go pack tests")
 	}
-	bin := filepath.Join(runtime.GOROOT(), "bin")
-	if _, err := os.Stat(filepath.Join(bin, "go")); err != nil {
-		skipLive(t, "no Go toolchain available for live Go pack tests")
-	}
-	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
 }
 
 func configFor(projects string) string {

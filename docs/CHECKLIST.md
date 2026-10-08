@@ -206,3 +206,24 @@ Limitations:
 - macOS/Windows execution of tests and the Windows taskkill path have not been run in this environment.
 - `pistos facts` runs natively only; the host virtualenv is not used in docker mode.
 - Pack images are built locally from pinned bases; apt/npm/pip layers make image IDs differ between builds, so the lock pins the built ID per machine.
+
+## Milestone 8 — benchmark, reliability audit and handoff
+
+Scope: reproducible benchmark commands and results, limitations matrix, tutorials, pack author
+guide, migration notes, release-readiness checklist, audit of all acceptance cases.
+
+- [x] `tools/bench`: startup, no-op, cold, warm-edit latency (p50/p95), install time separately, peak RSS summed over the process tree, three-run canonical identity — results in `docs/benchmarks/results.md`
+- [x] Performance budget test (`PISTOS_PERF_BUDGET=1`, run in CI) derived from the measured slice
+- [x] `tools/aibench` + labeled corpus: single / 3× same model / 3× + model triage at matched budgets — results in `docs/benchmarks/ai-results.md`; mixed-model not measurable here (documented)
+- [x] Regression-suite audit (`docs/regression-matrix.md`): 19 items fully automated, 3 partial (Windows execution, dedicated stub case, qualification assertions); two tests added
+- [x] Dogfooding: pistos reviews itself with go vet + Staticcheck + metrics; the one finding (deprecated `runtime.GOROOT` in a test helper) was fixed; 100 advisory complexity findings remain as known debt (largest: `Config.Validate`, cyclomatic 52)
+- [x] Limitations matrix, tutorial, pack author guide, migration notes, release-readiness checklist, CONTRIBUTING.md
+
+Measured (Linux arm64, 20 cores, 8 October 2026): startup 2.7 ms; no-op review ≈ 20 ms; Go medium
+(pistos, 15.6k lines) cold 1.8 s / warm edit 1.0 s; Python small cold 0.47 s with 705 MB peak RSS
+(Pyright); C# small 1.6 s; canonical output identical over three runs in every scenario.
+
+Not done / not verified (also in `docs/release-readiness.md`):
+- CI workflows have never run remotely; macOS and Windows are unverified.
+- Module path is still the placeholder `example.com/pistos`.
+- No hosted model, no mixed-model AI comparison, no large-monorepo benchmark.

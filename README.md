@@ -5,8 +5,9 @@ linters) and optional bring-your-own-key AI discovery. Deterministic checks deci
 findings are advisory. Human decisions (`pistos tag 47 irrelevant`) persist in a committed
 `.pistos/feedback.yaml` across diffs, commits, cache deletion and model changes.
 
-> Status: under active development. See [docs/CHECKLIST.md](docs/CHECKLIST.md) for what is implemented
-> and verified, and [docs/PLAN.md](docs/PLAN.md) for the full specification.
+> Status: milestones 1–8 implemented and verified on Linux arm64; CI on macOS/Windows not yet run.
+> See [docs/CHECKLIST.md](docs/CHECKLIST.md), [docs/release-readiness.md](docs/release-readiness.md),
+> [docs/limitations.md](docs/limitations.md) and the [tutorial](docs/tutorial.md).
 
 ## Quick start
 
