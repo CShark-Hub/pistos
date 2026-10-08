@@ -309,4 +309,3 @@ func keys(m map[string]finding.Issue) []string {
 	}
 	return out
 }
-
