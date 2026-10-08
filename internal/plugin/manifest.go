@@ -26,6 +26,7 @@ type Manifest struct {
 	SharedInputs   []string          `json:"shared_inputs"`
 	Tools          map[string]Tool   `json:"tools"`
 	Checks         map[string]Check  `json:"checks"`
+	LSP            *LSP              `json:"lsp,omitempty"`
 	Aliases        map[string]string `json:"aliases"`
 	Authority      []string          `json:"authority"`
 }
@@ -37,14 +38,23 @@ type Tool struct {
 	VersionArgs  []string `json:"version_args"`
 	VersionRegex string   `json:"version_regex"`
 	// Runtime names another tool of the pack that must run this one (e.g. node for a JS entry point).
-	Runtime string   `json:"runtime,omitempty"`
-	Acquire *Acquire `json:"acquire,omitempty"`
+	Runtime string `json:"runtime,omitempty"`
+	// VersionFrom "pack" takes the pack version (embedded workers); "package-json" reads the npm
+	// package version, for entry points that have no version flag.
+	VersionFrom string `json:"version_from,omitempty"`
+	// DotnetRoot marks .NET apphost tools, which locate the runtime through DOTNET_ROOT.
+	DotnetRoot bool     `json:"dotnet_root,omitempty"`
+	Acquire    *Acquire `json:"acquire,omitempty"`
 }
 
 type Acquire struct {
 	Method  string `json:"method"`
 	Package string `json:"package"`
 	Version string `json:"version"`
+	// Files are embedded pack sources copied into the managed directory ("embedded", "dotnet-embedded").
+	Files []string `json:"files,omitempty"`
+	// Deps are npm packages installed next to embedded files.
+	Deps []string `json:"deps,omitempty"`
 }
 
 type Check struct {
@@ -62,7 +72,9 @@ type Check struct {
 	// Unsupported explains why a selectable backend cannot run yet; selecting it is reported, not ignored.
 	Unsupported string `json:"unsupported,omitempty"`
 	// Artifacts is a directory (template) the tool writes structured results into instead of stdout.
-	Artifacts   string   `json:"artifacts,omitempty"`
+	Artifacts string `json:"artifacts,omitempty"`
+	// Facts marks a facts check ("metrics" or "imports"); core rules turn its facts into findings.
+	Facts       string   `json:"facts,omitempty"`
 	Limitations []string `json:"limitations,omitempty"`
 }
 
@@ -88,6 +100,9 @@ func ParseManifest(b []byte) (*Manifest, error) {
 	for _, id := range m.CheckIDs() {
 		c := m.Checks[id]
 		if c.Unsupported != "" {
+			continue
+		}
+		if c.Format == FormatBuiltinGo {
 			continue
 		}
 		if _, ok := m.Tools[c.Tool]; !ok {
@@ -130,6 +145,9 @@ func (m *Manifest) CheckIDs() []string {
 // ToolsFor returns the tools a check needs, its own tool first.
 func (m *Manifest) ToolsFor(checkID string) []string {
 	c := m.Checks[checkID]
+	if c.Format == FormatBuiltinGo {
+		return nil
+	}
 	out := []string{c.Tool}
 	if rt := m.Tools[c.Tool].Runtime; rt != "" {
 		out = append(out, rt)
@@ -168,4 +186,16 @@ func contains(list []string, s string) bool {
 		}
 	}
 	return false
+}
+
+// LSP describes the pack's language server for on-demand semantic facts.
+type LSP struct {
+	Tool string            `json:"tool"`
+	Uses []string          `json:"uses,omitempty"`
+	Args []string          `json:"args"`
+	Env  map[string]string `json:"env,omitempty"`
+	// Languages maps file extensions to LSP language identifiers.
+	Languages map[string]string `json:"languages"`
+	// Settings answer workspace/configuration requests by section; values may use {var:NAME}.
+	Settings map[string]map[string]string `json:"settings,omitempty"`
 }

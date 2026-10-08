@@ -57,6 +57,7 @@ type CapabilityResult struct {
 	Limitations []string  `json:"limitations,omitempty"`
 	Error       string    `json:"error,omitempty"`
 	InputKey    string    `json:"input_key,omitempty"`
+	Facts       *Facts    `json:"facts,omitempty"`
 	Tool        string    `json:"tool,omitempty"`
 	ToolVersion string    `json:"tool_version,omitempty"`
 }
@@ -173,6 +174,7 @@ func (r *Report) Normalize() {
 	})
 	for i := range caps {
 		caps[i].Findings = nil
+		caps[i].Facts = nil
 		sort.Strings(caps[i].Limitations)
 	}
 	sort.SliceStable(r.Issues, func(i, j int) bool {
@@ -194,4 +196,45 @@ func CanonicalJSON(v any) ([]byte, error) {
 		return nil, err
 	}
 	return buf.Bytes(), nil
+}
+
+// Facts are syntax/semantic observations a pack extracts; core rules turn them into findings.
+type Facts struct {
+	Algorithm string `json:"algorithm"`
+	// Nodes says what import edges connect: package directories (Go, C# namespaces mapped to
+	// directories) or individual files (Python, JS/TS).
+	Nodes     string         `json:"nodes"`
+	Functions []FunctionFact `json:"functions,omitempty"`
+	Imports   []ImportFact   `json:"imports,omitempty"`
+}
+
+// FunctionFact holds metrics for one named function or method (definitions in docs/metrics.md).
+type FunctionFact struct {
+	Path       string `json:"path"`
+	Symbol     string `json:"symbol"`
+	Line       int    `json:"line"`
+	EndLine    int    `json:"end_line"`
+	Statements int    `json:"statements"`
+	Params     int    `json:"params"`
+	Nesting    int    `json:"nesting"`
+	Cyclomatic int    `json:"cyclomatic"`
+}
+
+const (
+	NodesDir  = "dir"
+	NodesFile = "file"
+
+	ProvenanceResolved   = "resolved"
+	ProvenanceSyntaxOnly = "syntax-only"
+	ProvenanceUnknown    = "unknown"
+)
+
+// ImportFact is one dependency edge from a file to a node inside the project. External dependencies
+// are omitted; edges whose target could not be determined have an empty To and unknown provenance.
+type ImportFact struct {
+	From       string `json:"from"`
+	To         string `json:"to,omitempty"`
+	Spec       string `json:"spec"`
+	Line       int    `json:"line"`
+	Provenance string `json:"provenance"`
 }

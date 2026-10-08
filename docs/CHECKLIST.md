@@ -116,3 +116,36 @@ Limitations:
 - tsc project references, Biome, ty and mypy are not integrated.
 - C# restore uses only the local package cache; legacy/Windows-only project types are unverified.
 - Windows and macOS execution of the packs has not been run.
+
+## Milestone 5 — LSP, metrics and architecture rules
+
+Scope: on-demand LSP lifecycle/facts in the four ecosystems, versioned function metrics, baseline
+metric deltas, import graph facts, explicit cycle/layer rules.
+Planned tests: fake-server failure semantics (pull vs push, late push, failed init, crash, endless
+loading), live definitions/references/diagnostics per ecosystem, hand-computed metric fixtures per
+language, Go regression/worsened/formatting/rename/relocation/gate scenarios, layer and cycle
+violations, unknown-coverage qualification and strict mode, live import graphs for Python/JS/TS/C#.
+
+Verified live (Linux arm64): gopls 0.23.0, pyright-langserver 1.1.414, TypeScript 7.0.2 native LSP,
+csharp-ls 0.28.0; oxc-parser 0.153.0; Roslyn from .NET SDK 10.0.401; Python 3.12 `ast`.
+Command: `PISTOS_REQUIRE_LIVE=1 go test -race -count=1 ./...` — all pass, no skips (44 CLI scenarios).
+
+- [x] LSP client (Content-Length framing, separate from the worker protocol): initialize/initialized, capability negotiation, position-encoding conversion, configuration answers, didOpen versions, definition/references/implementation, pull diagnostics, progress-based readiness, `$/cancelRequest`, shutdown/exit
+- [x] Push-only diagnostics and timeouts are never complete; failed init/crash/unsupported methods are explicit
+- [x] `pistos facts …` starts only the owning project's server in the snapshot; results mapped to original paths; cached by backend/project/snapshot
+- [x] `plugins install --lsp` (gopls via `go install`, csharp-ls via `dotnet tool install`, pyright-langserver via npm, repository TypeScript)
+- [x] `review` never starts a language server
+- [x] Metrics v1 (statements, params, nesting, cyclomatic) for Go (`go/ast`), Python (`ast` worker), JS/TS (oxc-parser worker), C# (Roslyn worker built offline against the SDK)
+- [x] Embedded workers installed by `plugins install`; stale workers detected after pistos upgrades
+- [x] Baseline deltas: new / worsened (with base value) / existing; rename re-keying and symbol relocation; advisory unless `[metrics] gate = true`
+- [x] Import graph facts with provenance (resolved / syntax-only / unknown) for all four packs
+- [x] Cycle (Tarjan SCC) and explicit layer rules; unknown edges qualify results; `require_complete` strict mode
+- [x] Pre-existing issues whose decision guard fails (needs-revalidation) now gate
+
+Limitations:
+- TypeScript < 7 language server (typescript-language-server) is not integrated.
+- Go/pyright diagnostics through LSP are push-only and therefore always incomplete; batch checks
+  remain the authoritative gate.
+- Import graphs ignore Go build constraints, Python `sys.path` changes, tsconfig path aliases, package
+  `exports`, C# fully qualified names and reflection.
+- Cognitive complexity and duplication detection are not implemented.

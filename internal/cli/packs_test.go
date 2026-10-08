@@ -104,7 +104,7 @@ func TestPythonUnsupportedBackendIsExplicit(t *testing.T) {
 	r := setupPack(t, "python-app", "", func(r *gitrepo.Repo) {
 		r.Write("pyproject.toml", strings.Replace(r.Read("pyproject.toml"), "[tool.pyright]\ntypeCheckingMode = \"standard\"\n", "[tool.ty]\n", 1))
 	})
-	if cfg := r.Read(".pistos/config.toml"); !strings.Contains(cfg, `checks = ["ruff", "ty"]`) {
+	if cfg := r.Read(".pistos/config.toml"); !strings.Contains(cfg, `checks = ["ruff", "ty", "metrics"]`) {
 		t.Fatalf("init must keep the repository's ty selection, not substitute pyright:\n%s", cfg)
 	}
 	r.Write("pkg/extra.py", "X = 1\n")
@@ -156,10 +156,10 @@ func TestJSTSPackLive(t *testing.T) {
 			t.Fatal(err)
 		}
 	})
-	if cfg := r.Read(".pistos/config.toml"); !strings.Contains(cfg, `checks = ["tsc", "eslint"]`) {
+	if cfg := r.Read(".pistos/config.toml"); !strings.Contains(cfg, `checks = ["tsc", "eslint", "metrics"]`) {
 		t.Fatalf("init must keep the repository's ESLint rather than substitute another linter:\n%s", cfg)
 	}
-	r.Write(".pistos/config.toml", strings.Replace(r.Read(".pistos/config.toml"), `checks = ["tsc", "eslint"]`, `checks = ["tsc", "eslint", "oxlint"]`, 1))
+	r.Write(".pistos/config.toml", strings.Replace(r.Read(".pistos/config.toml"), `checks = ["tsc", "eslint", "metrics"]`, `checks = ["tsc", "eslint", "oxlint", "metrics"]`, 1))
 	if code, out, errs := run(t, r.Dir, "plugins", "install"); code != 0 {
 		t.Fatalf("%s %s", out, errs)
 	}

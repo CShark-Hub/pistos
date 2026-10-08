@@ -103,6 +103,7 @@ func RenderConfig(langs []string, projects []Project) string {
 	b.WriteString("profile = \"balanced\"\n\n")
 	b.WriteString("[execution]\nmode = \"native\"\njobs = 4\ntimeout = \"10m\"\n\n")
 	b.WriteString("[policy]\n# New deterministic findings at or above this severity fail the gate (error, warning, info, none).\nblock_on = \"warning\"\n\n")
+	b.WriteString("[metrics]\n# Thresholds for the metrics check (definitions: docs/metrics.md). Advisory unless gate = true.\ngate = false\ncyclomatic = 10\nnesting = 4\nparams = 5\nstatements = 50\n\n")
 	b.WriteString("[ai]\n# AI review is advisory and disabled until models are configured.\nenabled = false\nrequired = false\naggregation = \"union\"\nreuse_results = true\n")
 	for _, p := range projects {
 		b.WriteString("\n[[projects]]\n")

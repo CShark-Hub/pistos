@@ -25,14 +25,45 @@ const (
 )
 
 type Config struct {
-	Schema    int                   `toml:"schema"`
-	Languages []string              `toml:"languages"`
-	Profile   string                `toml:"profile"`
-	Execution Execution             `toml:"execution"`
-	Policy    Policy                `toml:"policy"`
-	Projects  []Project             `toml:"projects"`
-	AI        AI                    `toml:"ai"`
-	Models    map[string]ModelAlias `toml:"models"`
+	Schema       int                   `toml:"schema"`
+	Languages    []string              `toml:"languages"`
+	Profile      string                `toml:"profile"`
+	Execution    Execution             `toml:"execution"`
+	Policy       Policy                `toml:"policy"`
+	Projects     []Project             `toml:"projects"`
+	AI           AI                    `toml:"ai"`
+	Models       map[string]ModelAlias `toml:"models"`
+	Metrics      Metrics               `toml:"metrics"`
+	Architecture Architecture          `toml:"architecture"`
+}
+
+// Metrics thresholds apply to the "metrics" check. Findings are advisory unless Gate is set.
+type Metrics struct {
+	Gate       bool `toml:"gate"`
+	Cyclomatic int  `toml:"cyclomatic"`
+	Nesting    int  `toml:"nesting"`
+	Params     int  `toml:"params"`
+	Statements int  `toml:"statements"`
+}
+
+// Architecture rules apply to the "imports" check.
+type Architecture struct {
+	Gate   bool  `toml:"gate"`
+	Cycles *bool `toml:"cycles"`
+	// RequireComplete makes unresolved imports an incomplete result instead of a qualified one.
+	RequireComplete bool        `toml:"require_complete"`
+	Layers          []ArchLayer `toml:"layers"`
+	Rules           []ArchRule  `toml:"rules"`
+}
+
+type ArchLayer struct {
+	Name  string   `toml:"name"`
+	Paths []string `toml:"paths"`
+}
+
+type ArchRule struct {
+	From string   `toml:"from"`
+	Deny []string `toml:"deny"`
 }
 
 type Execution struct {
@@ -188,6 +219,19 @@ func (c *Config) applyDefaults() {
 		t := true
 		c.AI.Triage.KeepSupportedSingletons = &t
 	}
+	setDefault := func(v *int, d int) {
+		if *v == 0 {
+			*v = d
+		}
+	}
+	setDefault(&c.Metrics.Cyclomatic, 10)
+	setDefault(&c.Metrics.Nesting, 4)
+	setDefault(&c.Metrics.Params, 5)
+	setDefault(&c.Metrics.Statements, 50)
+	if c.Architecture.Cycles == nil {
+		t := true
+		c.Architecture.Cycles = &t
+	}
 	for i := range c.Projects {
 		if c.Projects[i].Root == "" {
 			c.Projects[i].Root = "."
@@ -286,6 +330,33 @@ func (c *Config) Validate() error {
 		}
 		if m.APIKeyEnv != "" && !envPattern.MatchString(m.APIKeyEnv) {
 			add("%s.api_key_env must name an environment variable, not hold a secret", where)
+		}
+	}
+	for name, v := range map[string]int{"cyclomatic": c.Metrics.Cyclomatic, "nesting": c.Metrics.Nesting, "params": c.Metrics.Params, "statements": c.Metrics.Statements} {
+		if v < 1 {
+			add("metrics.%s must be a positive threshold", name)
+		}
+	}
+	layers := map[string]bool{}
+	for i, l := range c.Architecture.Layers {
+		if !idPattern.MatchString(l.Name) || layers[l.Name] {
+			add("architecture.layers[%d].name %q must be unique and match %s", i, l.Name, idPattern)
+		}
+		layers[l.Name] = true
+		if len(l.Paths) == 0 {
+			add("architecture.layers[%d] needs at least one path glob", i)
+		}
+		for _, p := range l.Paths {
+			if _, err := CleanRel(strings.ReplaceAll(p, "*", "x")); err != nil {
+				add("architecture.layers[%d].paths: %v", i, err)
+			}
+		}
+	}
+	for i, r := range c.Architecture.Rules {
+		for _, n := range append([]string{r.From}, r.Deny...) {
+			if !layers[n] {
+				add("architecture.rules[%d] references undefined layer %q", i, n)
+			}
 		}
 	}
 	return errors.Join(errs...)

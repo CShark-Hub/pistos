@@ -52,6 +52,7 @@ func (a *app) pluginsCommand() *cobra.Command {
 		},
 	}
 	install.Flags().BoolVar(&o.Locked, "locked", false, "fail instead of changing lock.json")
+	install.Flags().BoolVar(&o.LSP, "lsp", false, "also install and lock the language servers used by `pistos facts`")
 	install.Flags().BoolVar(&o.Offline, "offline", false, "never download; only verify locally available tools")
 	cmd.AddCommand(install)
 	return cmd

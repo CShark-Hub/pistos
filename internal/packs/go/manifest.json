@@ -2,46 +2,147 @@
   "schema": 1,
   "name": "go",
   "version": "0.1.0",
-  "languages": ["go"],
-  "test_paths": ["**/*_test.go", "**/testdata/**"],
-  "options": ["tags", "goos", "goarch", "cgo_enabled"],
-  "env_passthrough": ["GOPATH", "GOMODCACHE", "GOCACHE", "GOPRIVATE", "GONOSUMDB", "GOINSECURE", "GOEXPERIMENT"],
-  "shared_inputs": ["go.work", "go.work.sum"],
+  "languages": [
+    "go"
+  ],
+  "test_paths": [
+    "**/*_test.go",
+    "**/testdata/**"
+  ],
+  "options": [
+    "tags",
+    "goos",
+    "goarch",
+    "cgo_enabled"
+  ],
+  "env_passthrough": [
+    "GOPATH",
+    "GOMODCACHE",
+    "GOCACHE",
+    "GOPRIVATE",
+    "GONOSUMDB",
+    "GOINSECURE",
+    "GOEXPERIMENT"
+  ],
+  "shared_inputs": [
+    "go.work",
+    "go.work.sum"
+  ],
   "tools": {
     "go": {
       "command": "go",
-      "lookup": ["path"],
-      "version_args": ["env", "GOVERSION"],
+      "lookup": [
+        "path"
+      ],
+      "version_args": [
+        "env",
+        "GOVERSION"
+      ],
       "version_regex": "^go([0-9][^\\s]*)"
     },
     "staticcheck": {
       "command": "staticcheck",
-      "lookup": ["managed", "path"],
-      "version_args": ["-version"],
+      "lookup": [
+        "managed",
+        "path"
+      ],
+      "version_args": [
+        "-version"
+      ],
       "version_regex": "\\((v?[0-9][^)]*)\\)",
-      "acquire": {"method": "go-install", "package": "honnef.co/go/tools/cmd/staticcheck", "version": "v0.8.1"}
+      "acquire": {
+        "method": "go-install",
+        "package": "honnef.co/go/tools/cmd/staticcheck",
+        "version": "v0.8.1"
+      }
+    },
+    "gopls": {
+      "command": "gopls",
+      "lookup": [
+        "managed",
+        "path"
+      ],
+      "version_args": [
+        "version"
+      ],
+      "version_regex": "gopls v(\\S+)",
+      "acquire": {
+        "method": "go-install",
+        "package": "golang.org/x/tools/gopls",
+        "version": "v0.23.0"
+      }
     }
   },
   "checks": {
     "go-vet": {
       "tool": "go",
-      "args": ["vet", "-p={jobs}", "-json", "-tags={opt:tags}", "./..."],
+      "args": [
+        "vet",
+        "-p={jobs}",
+        "-json",
+        "-tags={opt:tags}",
+        "./..."
+      ],
       "format": "go-vet",
       "scope": "project",
       "weight": 2,
-      "exit_codes": {"0": "clean", "1": "findings"},
-      "env": {"GOFLAGS": "-mod=readonly", "GOPROXY": "off", "GOTOOLCHAIN": "local", "GOOS": "{opt:goos}", "GOARCH": "{opt:goarch}", "CGO_ENABLED": "{opt:cgo_enabled}"},
-      "limitations": ["go vet reports only the first type error per package and skips its analyzers for that package"]
+      "exit_codes": {
+        "0": "clean",
+        "1": "findings"
+      },
+      "env": {
+        "GOFLAGS": "-mod=readonly",
+        "GOPROXY": "off",
+        "GOTOOLCHAIN": "local",
+        "GOOS": "{opt:goos}",
+        "GOARCH": "{opt:goarch}",
+        "CGO_ENABLED": "{opt:cgo_enabled}"
+      },
+      "limitations": [
+        "go vet reports only the first type error per package and skips its analyzers for that package"
+      ]
     },
     "staticcheck": {
       "tool": "staticcheck",
-      "uses": ["go"],
-      "args": ["-f", "json", "-tags={opt:tags}", "./..."],
+      "uses": [
+        "go"
+      ],
+      "args": [
+        "-f",
+        "json",
+        "-tags={opt:tags}",
+        "./..."
+      ],
       "format": "staticcheck-json",
       "scope": "project",
       "weight": 2,
-      "exit_codes": {"0": "clean", "1": "findings"},
-      "env": {"GOFLAGS": "-mod=readonly", "GOPROXY": "off", "GOTOOLCHAIN": "local", "GOOS": "{opt:goos}", "GOARCH": "{opt:goarch}", "CGO_ENABLED": "{opt:cgo_enabled}", "STATICCHECK_CACHE": "{cache}"}
+      "exit_codes": {
+        "0": "clean",
+        "1": "findings"
+      },
+      "env": {
+        "GOFLAGS": "-mod=readonly",
+        "GOPROXY": "off",
+        "GOTOOLCHAIN": "local",
+        "GOOS": "{opt:goos}",
+        "GOARCH": "{opt:goarch}",
+        "CGO_ENABLED": "{opt:cgo_enabled}",
+        "STATICCHECK_CACHE": "{cache}"
+      }
+    },
+    "metrics": {
+      "format": "builtin-go",
+      "facts": "metrics",
+      "scope": "file",
+      "weight": 1,
+      "args": []
+    },
+    "imports": {
+      "format": "builtin-go",
+      "facts": "imports",
+      "scope": "project",
+      "weight": 1,
+      "args": []
     }
   },
   "aliases": {
@@ -50,5 +151,23 @@
     "go-vet/load": "go/load",
     "staticcheck/compile": "go/typecheck"
   },
-  "authority": ["go-vet", "staticcheck"]
+  "authority": [
+    "go-vet",
+    "staticcheck"
+  ],
+  "lsp": {
+    "tool": "gopls",
+    "uses": [
+      "go"
+    ],
+    "args": [],
+    "languages": {
+      ".go": "go"
+    },
+    "env": {
+      "GOFLAGS": "-mod=readonly",
+      "GOPROXY": "off",
+      "GOTOOLCHAIN": "local"
+    }
+  }
 }

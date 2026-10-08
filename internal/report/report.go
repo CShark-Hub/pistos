@@ -98,7 +98,14 @@ func printIssue(w io.Writer, n int, is finding.Issue) {
 			loc += fmt.Sprintf(":%d", is.Location.Column)
 		}
 	}
-	fmt.Fprintf(w, "%s #%-4d %-7s %s  %s\n", mark, n, is.Severity, loc, is.Message)
+	msg := is.Message
+	if is.Metric != nil && is.Metric.Base != nil && *is.Metric.Base != is.Metric.Value {
+		msg += fmt.Sprintf(" (was %d)", *is.Metric.Base)
+	}
+	if is.Advisory {
+		mark = "·"
+	}
+	fmt.Fprintf(w, "%s #%-4d %-7s %s  %s\n", mark, n, is.Severity, loc, msg)
 	var tools []string
 	for _, s := range is.Sources {
 		tools = append(tools, s.Tool+":"+s.Rule)

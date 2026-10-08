@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"encoding/json"
+	"example.com/pistos/internal/finding"
 	"fmt"
 	"regexp"
 	"strconv"
@@ -24,6 +25,7 @@ type Parsed struct {
 	Diagnostics []Diagnostic
 	Limitations []string
 	Incomplete  string
+	Facts       *finding.Facts
 }
 
 type parser func(Output) (Parsed, error)

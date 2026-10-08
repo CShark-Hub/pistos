@@ -2,19 +2,91 @@
   "schema": 1,
   "name": "csharp",
   "version": "0.1.0",
-  "languages": ["csharp"],
-  "test_paths": ["**/*Tests/**", "**/*.Tests/**", "**/*Test/**", "**/tests/**", "**/test/**", "**/*Tests.cs"],
-  "options": ["configuration", "framework"],
-  "env_passthrough": ["DOTNET_ROOT", "NUGET_PACKAGES"],
-  "shared_inputs": ["Directory.Build.props", "Directory.Build.targets", "Directory.Packages.props", ".editorconfig", "global.json", "NuGet.config", "nuget.config"],
+  "languages": [
+    "csharp"
+  ],
+  "test_paths": [
+    "**/*Tests/**",
+    "**/*.Tests/**",
+    "**/*Test/**",
+    "**/tests/**",
+    "**/test/**",
+    "**/*Tests.cs"
+  ],
+  "options": [
+    "configuration",
+    "framework"
+  ],
+  "env_passthrough": [
+    "DOTNET_ROOT",
+    "NUGET_PACKAGES"
+  ],
+  "shared_inputs": [
+    "Directory.Build.props",
+    "Directory.Build.targets",
+    "Directory.Packages.props",
+    ".editorconfig",
+    "global.json",
+    "NuGet.config",
+    "nuget.config"
+  ],
   "tools": {
-    "dotnet": {"command": "dotnet", "lookup": ["path"], "version_args": ["--version"], "version_regex": "^(\\d\\S*)"}
+    "dotnet": {
+      "command": "dotnet",
+      "lookup": [
+        "path"
+      ],
+      "version_args": [
+        "--version"
+      ],
+      "version_regex": "^(\\d\\S*)"
+    },
+    "facts-worker": {
+      "command": "PistosFacts.dll",
+      "lookup": [
+        "managed"
+      ],
+      "runtime": "dotnet",
+      "version_from": "pack",
+      "version_args": [],
+      "version_regex": ".*",
+      "acquire": {
+        "method": "dotnet-embedded",
+        "package": "PistosFacts",
+        "version": "0.1.0",
+        "files": [
+          "csharp/worker/PistosFacts.csproj",
+          "csharp/worker/Program.cs"
+        ]
+      }
+    },
+    "csharp-ls": {
+      "command": "csharp-ls",
+      "lookup": [
+        "managed"
+      ],
+      "dotnet_root": true,
+      "version_args": [
+        "--version"
+      ],
+      "version_regex": "csharp-ls, (\\S+)",
+      "acquire": {
+        "method": "dotnet-tool",
+        "package": "csharp-ls",
+        "version": "0.28.0"
+      }
+    }
   },
   "checks": {
     "dotnet-build": {
       "tool": "dotnet",
       "args": [
-        "build", "-nologo", "-tl:off", "-nodeReuse:false", "-maxCpuCount:{jobs}", "--no-incremental",
+        "build",
+        "-nologo",
+        "-tl:off",
+        "-nodeReuse:false",
+        "-maxCpuCount:{jobs}",
+        "--no-incremental",
         "-p:UseSharedCompilation=false",
         "-p:UseArtifactsOutput=true",
         "-p:ArtifactsPath={var:artifacts}",
@@ -28,14 +100,54 @@
       "artifacts": "{var:sarif_dir}",
       "scope": "project",
       "weight": 4,
-      "exit_codes": {"0": "clean", "1": "findings"},
-      "env": {
-        "DOTNET_CLI_TELEMETRY_OPTOUT": "1", "DOTNET_NOLOGO": "1", "DOTNET_SKIP_FIRST_TIME_EXPERIENCE": "1",
-        "MSBUILDDISABLENODEREUSE": "1", "DOTNET_CLI_UI_LANGUAGE": "en"
+      "exit_codes": {
+        "0": "clean",
+        "1": "findings"
       },
-      "limitations": ["rebuilt with --no-incremental into a per-task artifacts path so up-to-date projects still report diagnostics and concurrent builds never share outputs"]
+      "env": {
+        "DOTNET_CLI_TELEMETRY_OPTOUT": "1",
+        "DOTNET_NOLOGO": "1",
+        "DOTNET_SKIP_FIRST_TIME_EXPERIENCE": "1",
+        "MSBUILDDISABLENODEREUSE": "1",
+        "DOTNET_CLI_UI_LANGUAGE": "en"
+      },
+      "limitations": [
+        "rebuilt with --no-incremental into a per-task artifacts path so up-to-date projects still report diagnostics and concurrent builds never share outputs"
+      ]
+    },
+    "metrics": {
+      "tool": "facts-worker",
+      "format": "worker",
+      "facts": "metrics",
+      "scope": "file",
+      "weight": 1,
+      "args": []
+    },
+    "imports": {
+      "tool": "facts-worker",
+      "format": "worker",
+      "facts": "imports",
+      "scope": "project",
+      "weight": 1,
+      "args": []
     }
   },
   "aliases": {},
-  "authority": ["dotnet-build"]
+  "authority": [
+    "dotnet-build"
+  ],
+  "lsp": {
+    "tool": "csharp-ls",
+    "uses": [
+      "dotnet"
+    ],
+    "args": [],
+    "languages": {
+      ".cs": "csharp"
+    },
+    "env": {
+      "DOTNET_CLI_TELEMETRY_OPTOUT": "1",
+      "DOTNET_NOLOGO": "1"
+    }
+  }
 }

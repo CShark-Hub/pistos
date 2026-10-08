@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"example.com/pistos/internal/config"
+	"example.com/pistos/internal/finding"
 	"example.com/pistos/internal/runner"
 )
 
@@ -220,4 +221,28 @@ func mustJSON(v any) json.RawMessage {
 		panic(err)
 	}
 	return b
+}
+
+type FactsParams struct {
+	Kind     string `json:"kind"`
+	Root     string `json:"root"`
+	RepoRoot string `json:"repo_root"`
+	Tree     string `json:"tree"`
+	Project  string `json:"project"`
+}
+
+type FactsResult struct {
+	Status      string         `json:"status"`
+	Tree        string         `json:"tree"`
+	Project     string         `json:"project"`
+	Facts       *finding.Facts `json:"facts"`
+	Limitations []string       `json:"limitations,omitempty"`
+}
+
+func (w *Worker) Facts(ctx context.Context, p FactsParams) (*FactsResult, error) {
+	var res FactsResult
+	if err := w.Call(ctx, "facts", p, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
 }

@@ -95,6 +95,18 @@ type Finding struct {
 	EvidenceHash string   `json:"evidence_hash"`
 	Capability   string   `json:"capability"`
 	Reproduce    []string `json:"reproduce,omitempty"`
+	// Advisory findings are reported but never block the gate (e.g. metrics without a gate rule).
+	Advisory bool         `json:"advisory,omitempty"`
+	Metric   *MetricValue `json:"metric,omitempty"`
+}
+
+// MetricValue records a measured value so baseline comparison can detect worsening, not just presence.
+type MetricValue struct {
+	Name      string `json:"name"`
+	Value     int    `json:"value"`
+	Threshold int    `json:"threshold"`
+	Base      *int   `json:"base,omitempty"`
+	Algorithm string `json:"algorithm"`
 }
 
 var spaceRun = regexp.MustCompile(`\s+`)

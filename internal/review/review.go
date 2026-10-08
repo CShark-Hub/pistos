@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"example.com/pistos/internal/config"
+	"example.com/pistos/internal/facts"
 	"example.com/pistos/internal/feedback"
 	"example.com/pistos/internal/finding"
 	"example.com/pistos/internal/fsutil"
@@ -73,6 +74,32 @@ type treeOnce struct {
 	err  error
 }
 
+func newEngine(ctx context.Context, o Options, cfg *config.Config) (*engine, error) {
+	if cfg.Execution.Mode != "native" {
+		return nil, &ConfigError{fmt.Errorf("execution.mode %q is not available in this build", cfg.Execution.Mode)}
+	}
+	lock, err := config.LoadLock(o.Repo)
+	if err != nil {
+		return nil, &ConfigError{err}
+	}
+	e := &engine{
+		opts: o, cfg: cfg, git: snapshot.Git{Repo: o.Repo}, store: store.Store{Repo: o.Repo},
+		manifests: map[string]*plugin.Manifest{}, sources: newSourceCache(), trees: map[string]*treeOnce{},
+	}
+	if !e.git.IsRepo(ctx) {
+		return nil, &ConfigError{errors.New("pistos requires a git repository")}
+	}
+	root, err := plugin.CacheRoot()
+	if err != nil {
+		return nil, err
+	}
+	// Trees are grouped per repository because materializations gain repository-specific links to
+	// installed dependencies.
+	e.treeRoot = filepath.Join(root, "trees", fsutil.HashStrings(o.Repo)[:16])
+	e.toolbox = plugin.NewToolbox(o.Repo, e.store.StateDir(), lock, plugin.BaseEnv(nil))
+	return e, nil
+}
+
 // Run performs a review and records it as the current report.
 func Run(ctx context.Context, o Options) (*finding.Envelope, error) {
 	started := time.Now()
@@ -95,29 +122,10 @@ func Run(ctx context.Context, o Options) (*finding.Envelope, error) {
 	if o.All && (o.Base != "" || o.Head != "") {
 		return nil, &ConfigError{errors.New("--all reviews the working snapshot as a whole and cannot be combined with --base/--head")}
 	}
-	if cfg.Execution.Mode != "native" {
-		return nil, &ConfigError{fmt.Errorf("execution.mode %q is not available in this build", cfg.Execution.Mode)}
-	}
-	lock, err := config.LoadLock(o.Repo)
-	if err != nil {
-		return nil, &ConfigError{err}
-	}
-
-	e := &engine{
-		opts: o, cfg: cfg, git: snapshot.Git{Repo: o.Repo}, store: store.Store{Repo: o.Repo},
-		manifests: map[string]*plugin.Manifest{}, sources: newSourceCache(), trees: map[string]*treeOnce{},
-	}
-	if !e.git.IsRepo(ctx) {
-		return nil, &ConfigError{errors.New("pistos review requires a git repository")}
-	}
-	root, err := plugin.CacheRoot()
+	e, err := newEngine(ctx, o, cfg)
 	if err != nil {
 		return nil, err
 	}
-	// Trees are grouped per repository because materializations gain repository-specific links to
-	// installed dependencies.
-	e.treeRoot = filepath.Join(root, "trees", fsutil.HashStrings(o.Repo)[:16])
-	e.toolbox = plugin.NewToolbox(o.Repo, e.store.StateDir(), lock, plugin.BaseEnv(nil))
 	defer e.toolbox.Save()
 
 	scope, changes, err := e.resolveScope(ctx)
@@ -145,7 +153,13 @@ func Run(ctx context.Context, o Options) (*finding.Envelope, error) {
 		if ctx.Err() != nil {
 			return nil, ctx.Err()
 		}
-		rep.Coverage.Capabilities, rep.Issues = assemble(results, scope, e.manifests, projects)
+		renames := map[string]string{}
+		for _, c := range changes {
+			if c.Status == "R" {
+				renames[c.From] = c.Path
+			}
+		}
+		rep.Coverage.Capabilities, rep.Issues = assemble(results, scope, e.manifests, projects, renames)
 	}
 
 	fb, note, err := e.loadFeedback(ctx, scope)
@@ -445,28 +459,41 @@ func (e *engine) runTask(ctx context.Context, t task) (finding.CapabilityResult,
 	key := e.inputKey(ctx, t, m, tools, prep.fingerprint)
 	if cached, ok := e.store.GetResult(key); ok {
 		cached.Status = finding.StatusCachedComplete
+		if check.Facts != "" {
+			e.deriveFindings(ctx, t, workRoot, cached)
+		}
 		return *cached, true
+	}
+	toolPath, toolName, toolVersion := "(built in)", "builtin-go", m.Version
+	var mainTool plugin.ResolvedTool
+	var uses []plugin.ResolvedTool
+	if len(tools) > 0 {
+		mainTool, uses = tools[0], tools[1:]
+		toolPath, toolName, toolVersion = mainTool.Path, mainTool.Name, mainTool.Version
 	}
 
 	inv := plugin.Invocation{
-		Manifest: m, CheckID: t.Capability, Tool: tools[0], Uses: tools[1:], ProjectDir: projectDir,
+		Manifest: m, CheckID: t.Capability, Tool: mainTool, Uses: uses, ProjectDir: projectDir, RepoRoot: t.project.Root,
 		Options: t.project.Options, Jobs: t.Weight, Timeout: e.cfg.Execution.Timeout.Duration,
 		ScratchDir: scratch,
 		Tree:       plugin.TreeScope{ID: t.tree, Project: t.project.ID},
 		Vars:       prep.vars,
 	}
-	e.progress("%s: %s", t.ID, tools[0].Path)
+	e.progress("%s: %s", t.ID, toolPath)
 	parsed, status, err := plugin.Execute(ctx, inv)
 	findings, limits := e.normalize(ctx, t, m, workRoot, projectDir, parsed.Diagnostics)
 	res := finding.CapabilityResult{
 		Status: status, Findings: findings, Limitations: append(append(append(limits, prep.limits...), check.Limitations...), parsed.Limitations...),
-		InputKey: key, Tool: tools[0].Name, ToolVersion: tools[0].Version,
+		InputKey: key, Tool: toolName, ToolVersion: toolVersion, Facts: parsed.Facts,
 	}
 	if err != nil {
 		res.Error = err.Error()
 	}
 	if status == finding.StatusComplete {
 		_ = e.store.PutResult(key, res)
+	}
+	if check.Facts != "" && parsed.Facts != nil {
+		e.deriveFindings(ctx, t, workRoot, &res)
 	}
 	return res, false
 }
@@ -476,8 +503,11 @@ func (e *engine) inputKey(ctx context.Context, t task, m *plugin.Manifest, tools
 	in := finding.InputManifest{
 		Tree:        t.tree,
 		ProjectHash: e.git.ObjectID(ctx, t.tree, t.project.Root),
-		Tool:        tools[0].Name, ToolVersion: tools[0].Version, ToolSHA256: tools[0].Identity,
+		Tool:        "builtin-go", ToolVersion: facts.Algorithm,
 		Args: m.Checks[t.Capability].Args, Pack: m.Name, PackVersion: m.Version,
+	}
+	if len(tools) > 0 {
+		in.Tool, in.ToolVersion, in.ToolSHA256 = tools[0].Name, tools[0].Version, tools[0].Identity
 	}
 	// The tree ID is deliberately dropped: unrelated edits elsewhere in the repository must not
 	// invalidate a project's result.
@@ -501,7 +531,7 @@ func (e *engine) inputKey(ctx context.Context, t task, m *plugin.Manifest, tools
 		}
 	}
 	in.SharedHash = fsutil.HashStrings(shared...)
-	for _, u := range tools[1:] {
+	for _, u := range tools[min(1, len(tools)):] {
 		in.EnvHash += u.Name + "@" + u.Version + ":" + u.Identity + ";"
 	}
 	in.Env = map[string]string{}

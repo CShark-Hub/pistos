@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -12,6 +13,8 @@ import (
 	"time"
 
 	"example.com/pistos/internal/config"
+	"example.com/pistos/internal/fsutil"
+	"example.com/pistos/internal/packs"
 	"example.com/pistos/internal/runner"
 )
 
@@ -21,6 +24,8 @@ type InstallOptions struct {
 	Offline  bool
 	StateDir string
 	Log      func(string)
+	// LSP also installs and locks the language servers of the active packs.
+	LSP bool
 }
 
 type InstallResult struct {
@@ -82,6 +87,24 @@ func Install(ctx context.Context, cfg *config.Config, lock *config.Lock, o Insta
 			}
 		}
 	}
+	if o.LSP {
+		for _, p := range cfg.Projects {
+			eco, _ := config.NormalizeLanguage(p.Ecosystem)
+			m, _ := LoadManifest(eco)
+			if m == nil || m.LSP == nil {
+				continue
+			}
+			names := append([]string{m.LSP.Tool, m.Tools[m.LSP.Tool].Runtime}, m.LSP.Uses...)
+			for _, tool := range names {
+				dir := filepath.Join(o.Repo, filepath.FromSlash(p.Root))
+				k := eco + "\x00" + tool + "\x00" + dir
+				if tool != "" && !seen[k] {
+					seen[k] = true
+					needs = append(needs, need{m, tool, dir})
+				}
+			}
+		}
+	}
 	// Runtimes such as the Go toolchain must be ready before tools built with them are acquired.
 	sort.SliceStable(needs, func(i, j int) bool {
 		return needs[i].m.Tools[needs[i].tool].Acquire == nil && needs[j].m.Tools[needs[j].tool].Acquire != nil
@@ -92,7 +115,8 @@ func Install(ctx context.Context, cfg *config.Config, lock *config.Lock, o Insta
 	for _, n := range needs {
 		r := InstallResult{Tool: n.tool, Pack: n.m.Name}
 		rt, err := tb.Identify(ctx, n.m, n.tool, n.projectDir)
-		if errors.Is(err, ErrNotFound) && n.m.Tools[n.tool].Acquire != nil {
+		stale := errors.Is(err, ErrChanged) && n.m.Tools[n.tool].VersionFrom == "pack"
+		if (errors.Is(err, ErrNotFound) || stale) && n.m.Tools[n.tool].Acquire != nil {
 			if o.Offline {
 				err = fmt.Errorf("%w; acquisition disabled by --offline", err)
 			} else {
@@ -187,10 +211,7 @@ func acquire(ctx context.Context, tb *Toolbox, m *Manifest, tool, projectDir str
 		if err != nil {
 			return fmt.Errorf("npm acquisition needs Node.js: %w", err)
 		}
-		npm := filepath.Join(filepath.Dir(node.Path), "npm")
-		if runtime.GOOS == "windows" {
-			npm += ".cmd"
-		}
+		npm := npmFor(node.Path)
 		pkg, _, _ := strings.Cut(a.Package, ":")
 		// Install scripts are disabled: acquisition must not execute arbitrary package code.
 		return runAcquire(ctx, npm, []string{"install", "--prefix", root, "--no-save", "--ignore-scripts", "--no-audit", "--no-fund", pkg + "@" + a.Version}, root,
@@ -209,9 +230,68 @@ func acquire(ctx context.Context, tb *Toolbox, m *Manifest, tool, projectDir str
 			pip = filepath.Join(venv, "Scripts", "pip.exe")
 		}
 		return runAcquire(ctx, pip, []string{"install", "--disable-pip-version-check", "--no-input", a.Package + "==" + a.Version}, root, acquisitionEnv())
+	case "embedded":
+		if err := copyEmbedded(a.Files, root); err != nil {
+			return err
+		}
+		if len(a.Deps) == 0 {
+			return nil
+		}
+		node, err := tb.Identify(ctx, m, "node", projectDir)
+		if err != nil {
+			return fmt.Errorf("worker dependencies need Node.js: %w", err)
+		}
+		args := append([]string{"install", "--prefix", root, "--no-save", "--ignore-scripts", "--no-audit", "--no-fund"}, a.Deps...)
+		return runAcquire(ctx, npmFor(node.Path), args, root, acquisitionEnv("PATH="+filepath.Dir(node.Path)+string(os.PathListSeparator)+os.Getenv("PATH")))
+	case "dotnet-embedded":
+		dotnet, err := tb.Identify(ctx, m, "dotnet", projectDir)
+		if err != nil {
+			return fmt.Errorf("building the worker needs the .NET SDK: %w", err)
+		}
+		src := filepath.Join(root, "src")
+		if err := copyEmbedded(a.Files, src); err != nil {
+			return err
+		}
+		major, _, _ := strings.Cut(dotnet.Version, ".")
+		empty := filepath.Join(root, "empty-feed")
+		_ = os.MkdirAll(empty, 0o755)
+		// The worker references the SDK's bundled Roslyn, so restore needs no package source.
+		return runAcquire(ctx, dotnet.Path, []string{"build", "-c", "Release", "-nologo", "-tl:off", "-nodeReuse:false",
+			"-o", filepath.Join(root, "bin"), "-p:PistosTargetFramework=net" + major + ".0", "-p:RestoreSources=" + empty, "-p:UseSharedCompilation=false"},
+			src, acquisitionEnv("DOTNET_CLI_TELEMETRY_OPTOUT=1", "DOTNET_NOLOGO=1"))
+	case "dotnet-tool":
+		dotnet, err := tb.Identify(ctx, m, "dotnet", projectDir)
+		if err != nil {
+			return fmt.Errorf("dotnet tool install needs the .NET SDK: %w", err)
+		}
+		return runAcquire(ctx, dotnet.Path, []string{"tool", "install", a.Package, "--version", a.Version, "--tool-path", filepath.Join(root, "bin")},
+			root, acquisitionEnv("DOTNET_CLI_TELEMETRY_OPTOUT=1", "DOTNET_NOLOGO=1"))
 	default:
 		return fmt.Errorf("unsupported acquisition method %q", a.Method)
 	}
+}
+
+func npmFor(node string) string {
+	if runtime.GOOS == "windows" {
+		return filepath.Join(filepath.Dir(node), "npm.cmd")
+	}
+	return filepath.Join(filepath.Dir(node), "npm")
+}
+
+func copyEmbedded(files []string, dir string) error {
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return err
+	}
+	for _, f := range files {
+		b, err := fs.ReadFile(packs.FS, f)
+		if err != nil {
+			return err
+		}
+		if err := fsutil.WriteFileAtomic(filepath.Join(dir, filepath.Base(f)), b, 0o644); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func runAcquire(ctx context.Context, exe string, args []string, dir string, env []string) error {

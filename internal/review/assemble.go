@@ -14,16 +14,22 @@ const (
 	ChangeExisting = "existing"
 	ChangeUnknown  = "unknown"
 	ChangeInScope  = "in-scope"
+	ChangeWorsened = "worsened"
 )
 
 // assemble merges per-tool findings per project and classifies them against the baseline.
-func assemble(results []*taskResult, s finding.Scope, manifests map[string]*plugin.Manifest, projects []finding.Project) ([]finding.CapabilityResult, []finding.Issue) {
+// Baseline findings in renamed files are re-keyed to their new path first, and a finding whose
+// enclosing symbol moved to another file is matched by symbol and anchor, so relocation is not
+// reported as new debt.
+func assemble(results []*taskResult, s finding.Scope, manifests map[string]*plugin.Manifest, projects []finding.Project, renames map[string]string) ([]finding.CapabilityResult, []finding.Issue) {
 	var caps []finding.CapabilityResult
 	head := map[string][]finding.Finding{}
-	baseKeys := map[string]map[string]bool{}
+	base := map[string]map[string]finding.Finding{}
+	relocated := map[string]map[string]finding.Finding{}
 	baseComplete := map[string]bool{}
 	for _, p := range projects {
-		baseKeys[p.ID] = map[string]bool{}
+		base[p.ID] = map[string]finding.Finding{}
+		relocated[p.ID] = map[string]finding.Finding{}
 		baseComplete[p.ID] = true
 	}
 	for _, r := range results {
@@ -33,14 +39,21 @@ func assemble(results []*taskResult, s finding.Scope, manifests map[string]*plug
 		case sideHead:
 			head[pid] = append(head[pid], r.result.Findings...)
 		case sideBase:
-			if r.result.Status == finding.StatusNotRequested {
+			if r.result.Status == finding.StatusNotRequested || r.result.Status == finding.StatusUnsupported {
 				continue
 			}
 			if !r.result.Status.Completed() {
 				baseComplete[pid] = false
 			}
 			for _, f := range r.result.Findings {
-				baseKeys[pid][f.Key] = true
+				if to, ok := renames[f.Location.Path]; ok {
+					f.Location.Path = to
+					f.Key = finding.ComputeKey(f.Project, f.Family, to, f.Anchor.Symbol, f.Anchor.TextHash, f.Anchor.Ordinal)
+				}
+				base[pid][f.Key] = f
+				if f.Anchor.Symbol != "" {
+					relocated[pid][relocationKey(f)] = f
+				}
 			}
 		}
 	}
@@ -50,8 +63,19 @@ func assemble(results []*taskResult, s finding.Scope, manifests map[string]*plug
 		for _, f := range finding.Merge(head[p.ID], manifests[p.Ecosystem].Authority) {
 			change := ChangeInScope
 			if s.Mode != "all" {
+				prev, ok := base[p.ID][f.Key]
+				if !ok && f.Anchor.Symbol != "" {
+					prev, ok = relocated[p.ID][relocationKey(f)]
+				}
 				switch {
-				case baseKeys[p.ID][f.Key]:
+				case ok && f.Metric != nil && prev.Metric != nil:
+					v := prev.Metric.Value
+					f.Metric.Base = &v
+					change = ChangeExisting
+					if f.Metric.Value > v {
+						change = ChangeWorsened
+					}
+				case ok:
 					change = ChangeExisting
 				case baseComplete[p.ID]:
 					change = ChangeNew
@@ -63,6 +87,10 @@ func assemble(results []*taskResult, s finding.Scope, manifests map[string]*plug
 		}
 	}
 	return caps, issues
+}
+
+func relocationKey(f finding.Finding) string {
+	return f.Family + "\x00" + f.Anchor.Symbol + "\x00" + f.Anchor.TextHash + "\x00" + fmt.Sprint(f.Anchor.Ordinal)
 }
 
 // gated reports whether an issue's baseline relationship puts it under the gate.
@@ -84,7 +112,10 @@ func Finalize(rep *finding.Report, blockOn string, apply func([]finding.Issue)) 
 	blocking := 0
 	for i := range rep.Issues {
 		is := &rep.Issues[i]
-		is.Blocking = is.Lane == finding.LaneDeterministic && gated(is.Change) &&
+		// A decision whose guard no longer holds was invalidated by this change, so it gates even when
+		// the finding itself pre-dates the baseline.
+		underGate := gated(is.Change) || is.Disposition.State == finding.DispRevalidate
+		is.Blocking = is.Lane == finding.LaneDeterministic && underGate && !is.Advisory &&
 			is.Disposition.State != finding.DispSuppressed && is.Severity.Rank() >= threshold
 		if is.Blocking {
 			blocking++

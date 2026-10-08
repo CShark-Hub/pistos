@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"example.com/pistos/internal/facts"
 	"example.com/pistos/internal/finding"
 	"example.com/pistos/internal/runner"
 )
@@ -50,6 +51,8 @@ type Invocation struct {
 	Tree TreeScope
 	// Vars are values computed by pistos for {var:NAME} placeholders (scratch paths, interpreters).
 	Vars map[string]string
+	// RepoRoot is the project's repository-relative root; facts paths are reported relative to the repository.
+	RepoRoot string
 }
 
 type TreeScope struct {
@@ -135,6 +138,9 @@ func Execute(ctx context.Context, inv Invocation) (Parsed, finding.Status, error
 	if err := os.MkdirAll(inv.ScratchDir, 0o755); err != nil {
 		return Parsed{}, finding.StatusFailed, err
 	}
+	if c.Facts != "" {
+		return executeFacts(ctx, inv)
+	}
 	if c.Format == FormatWorker {
 		return executeWorker(ctx, inv)
 	}
@@ -188,7 +194,11 @@ func Execute(ctx context.Context, inv Invocation) (Parsed, finding.Status, error
 }
 
 // FormatWorker marks checks served by an out-of-process worker instead of a wrapped CLI.
-const FormatWorker = "worker"
+// FormatBuiltinGo marks Go facts computed in-process with go/ast; no tool is started.
+const (
+	FormatWorker    = "worker"
+	FormatBuiltinGo = "builtin-go"
+)
 
 func executeWorker(ctx context.Context, inv Invocation) (Parsed, finding.Status, error) {
 	cmd := inv.Command()
@@ -237,4 +247,48 @@ func readArtifacts(dir string) ([][]byte, error) {
 		out = append(out, b)
 	}
 	return out, nil
+}
+
+func executeFacts(ctx context.Context, inv Invocation) (Parsed, finding.Status, error) {
+	c := inv.Manifest.Checks[inv.CheckID]
+	if c.Format == FormatBuiltinGo {
+		f, limits, err := facts.GoFacts(inv.ProjectDir, inv.RepoRoot)
+		if err != nil {
+			return Parsed{}, finding.StatusFailed, err
+		}
+		if c.Facts == "metrics" {
+			f.Imports = nil
+		} else {
+			f.Functions = nil
+		}
+		return Parsed{Facts: f, Limitations: limits}, finding.StatusComplete, nil
+	}
+	if inv.Timeout > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, inv.Timeout)
+		defer cancel()
+	}
+	w, err := StartWorker(ctx, inv.Command(), inv.Manifest.Name, inv.Manifest.Version)
+	if err != nil {
+		return Parsed{}, finding.StatusFailed, fmt.Errorf("%s: %w", inv.CheckID, err)
+	}
+	res, err := w.Facts(ctx, FactsParams{Kind: c.Facts, Root: inv.ProjectDir, RepoRoot: inv.RepoRoot, Tree: inv.Tree.ID, Project: inv.Tree.Project})
+	if err != nil {
+		w.Kill()
+		if ctx.Err() != nil {
+			return Parsed{}, finding.StatusIncomplete, fmt.Errorf("%s: %w", inv.CheckID, ctx.Err())
+		}
+		return Parsed{}, finding.StatusFailed, fmt.Errorf("%s: %w: %s", inv.CheckID, err, tail(strings.Split(string(w.Stderr()), "\n")))
+	}
+	_ = w.Shutdown(ctx)
+	p := Parsed{Facts: res.Facts, Limitations: res.Limitations}
+	switch {
+	case res.Facts == nil:
+		return p, finding.StatusFailed, fmt.Errorf("%s: worker returned no facts", inv.CheckID)
+	case res.Tree != inv.Tree.ID || res.Project != inv.Tree.Project:
+		return p, finding.StatusIncomplete, fmt.Errorf("%s: worker reported scope %s/%s, expected %s/%s", inv.CheckID, res.Project, res.Tree, inv.Tree.Project, inv.Tree.ID)
+	case res.Status != string(finding.StatusComplete):
+		return p, finding.StatusIncomplete, fmt.Errorf("%s: worker reported status %q", inv.CheckID, res.Status)
+	}
+	return p, finding.StatusComplete, nil
 }

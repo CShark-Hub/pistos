@@ -11,6 +11,30 @@ timeout = "10m"
 [policy]
 block_on = "warning"          # error | warning | info | none
 
+[metrics]
+gate = false
+cyclomatic = 10
+nesting = 4
+params = 5
+statements = 50
+
+[architecture]
+gate = false
+cycles = true
+require_complete = false
+
+[[architecture.layers]]
+name = "domain"
+paths = ["svc/internal/domain/**"]
+
+[[architecture.layers]]
+name = "infra"
+paths = ["svc/internal/infra/**"]
+
+[[architecture.rules]]
+from = "domain"
+deny = ["infra"]
+
 [ai]
 enabled = false
 required = false
@@ -35,7 +59,7 @@ timeout = "120s"
 id = "go-svc"
 root = "svc"
 ecosystem = "go"
-checks = ["go-vet", "staticcheck"]
+checks = ["go-vet", "staticcheck", "metrics", "imports"]
 options = { tags = "integration" }
 
 [[projects]]

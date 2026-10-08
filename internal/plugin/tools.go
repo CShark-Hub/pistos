@@ -1,10 +1,12 @@
 package plugin
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -16,6 +18,7 @@ import (
 
 	"example.com/pistos/internal/config"
 	"example.com/pistos/internal/fsutil"
+	"example.com/pistos/internal/packs"
 	"example.com/pistos/internal/runner"
 )
 
@@ -112,6 +115,10 @@ func managedPath(m *Manifest, name string) (string, bool) {
 		return "", false
 	}
 	switch t.Acquire.Method {
+	case "embedded":
+		return executableIn(root, t.Command)
+	case "dotnet-embedded":
+		return executableIn(filepath.Join(root, "bin"), t.Command)
 	case "npm":
 		pkg, bin, _ := strings.Cut(t.Acquire.Package, ":")
 		return nodePackageBin(root, pkg, bin)
@@ -251,8 +258,25 @@ func (tb *Toolbox) Identify(ctx context.Context, m *Manifest, name, projectDir s
 	tb.cache.mu.Lock()
 	e, ok := tb.cache.Entries[real]
 	tb.cache.mu.Unlock()
-	if !ok || e.Size != fi.Size() || e.ModTime != fi.ModTime().UnixNano() {
+	if t := m.Tools[name]; t.VersionFrom == "pack" {
+		if err := embeddedCurrent(m, name, path); err != nil {
+			return ResolvedTool{}, err
+		}
+		sum, err := fsutil.HashFile(real)
+		if err != nil {
+			return ResolvedTool{}, err
+		}
+		e = identityEntry{Version: m.Version, Identity: fsutil.HashStrings(sum, m.Version)}
+	} else if !ok || e.Size != fi.Size() || e.ModTime != fi.ModTime().UnixNano() {
 		exe, args := path, []string(nil)
+		env := tb.Env
+		if m.Tools[name].DotnetRoot {
+			root, err := tb.DotnetRoot(ctx, m, projectDir)
+			if err != nil {
+				return ResolvedTool{}, err
+			}
+			env = append(append([]string{}, env...), "DOTNET_ROOT="+root)
+		}
 		if rt := m.Tools[name].Runtime; rt != "" {
 			r, err := tb.Identify(ctx, m, rt, projectDir)
 			if err != nil {
@@ -260,7 +284,12 @@ func (tb *Toolbox) Identify(ctx context.Context, m *Manifest, name, projectDir s
 			}
 			exe, args = r.Path, []string{path}
 		}
-		version, err := ProbeVersion(ctx, m.Tools[name], exe, args, tb.Env)
+		var version string
+		if m.Tools[name].VersionFrom == "package-json" {
+			version, err = packageVersion(real)
+		} else {
+			version, err = ProbeVersion(ctx, m.Tools[name], exe, args, env)
+		}
 		if err != nil {
 			return ResolvedTool{}, err
 		}
@@ -314,4 +343,62 @@ func (tb *Toolbox) Resolve(ctx context.Context, m *Manifest, name, projectDir st
 	tb.resolved[memo] = rt
 	tb.mu.Unlock()
 	return rt, nil
+}
+
+// embeddedCurrent rejects an installed worker whose sources differ from those embedded in this
+// pistos binary, so an upgrade never runs a stale worker silently.
+func embeddedCurrent(m *Manifest, name, installed string) error {
+	a := m.Tools[name].Acquire
+	if a == nil {
+		return nil
+	}
+	root, err := ManagedRoot(m.Name, name, a.Version)
+	if err != nil {
+		return err
+	}
+	for _, f := range a.Files {
+		want, err := fs.ReadFile(packs.FS, f)
+		if err != nil {
+			return err
+		}
+		dst := filepath.Join(root, filepath.Base(f))
+		if a.Method == "dotnet-embedded" {
+			dst = filepath.Join(root, "src", filepath.Base(f))
+		}
+		got, err := os.ReadFile(dst)
+		if err != nil || !bytes.Equal(got, want) {
+			return fmt.Errorf("%w: %s at %s does not match this pistos version; run `pistos plugins install`", ErrChanged, name, installed)
+		}
+	}
+	return nil
+}
+
+// DotnetRoot is the installation directory of the pack's dotnet tool, for apphost-based tools.
+func (tb *Toolbox) DotnetRoot(ctx context.Context, m *Manifest, projectDir string) (string, error) {
+	d, err := tb.Identify(ctx, m, "dotnet", projectDir)
+	if err != nil {
+		return "", fmt.Errorf("DOTNET_ROOT needs the dotnet tool: %w", err)
+	}
+	real, err := filepath.EvalSymlinks(d.Path)
+	if err != nil {
+		return "", err
+	}
+	return filepath.Dir(real), nil
+}
+
+// packageVersion reads the version of the npm package containing file.
+func packageVersion(file string) (string, error) {
+	for dir := filepath.Dir(file); ; dir = filepath.Dir(dir) {
+		if b, err := os.ReadFile(filepath.Join(dir, "package.json")); err == nil {
+			var meta struct {
+				Version string `json:"version"`
+			}
+			if json.Unmarshal(b, &meta) == nil && meta.Version != "" {
+				return meta.Version, nil
+			}
+		}
+		if filepath.Dir(dir) == dir {
+			return "", fmt.Errorf("no package.json with a version above %s", file)
+		}
+	}
 }

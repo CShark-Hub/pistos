@@ -37,6 +37,11 @@ Language selection accepts aliases: `go`/`golang`, `py`/`python`, `js`/`ts`/`jav
 Packs activate only for projects affected by a change; tools are locked in `.pistos/lock.json` and
 never installed or upgraded by `review`. Decisions are documented in [docs/feedback.md](docs/feedback.md).
 
+Every pack also offers `metrics` (function complexity with baseline deltas, [docs/metrics.md](docs/metrics.md))
+and `imports` (dependency cycles and layer rules, [docs/rules.md](docs/rules.md)) checks, and on-demand
+semantic queries through language servers: `pistos facts references svc/main.go:12:9`
+([docs/lsp.md](docs/lsp.md)).
+
 ## Module path
 
 The Go module path `example.com/pistos` is a placeholder until the publishing identity is decided.

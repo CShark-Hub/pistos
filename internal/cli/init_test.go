@@ -32,7 +32,7 @@ func TestInitDetectsAndIsIdempotent(t *testing.T) {
 		t.Fatalf("init failed: %s %s", out, errs)
 	}
 	cfg := r.Read(".pistos/config.toml")
-	for _, want := range []string{`languages = ["go", "python"]`, `id = "go-svc"`, `id = "python-tools"`, `checks = ["ruff", "pyright"]`} {
+	for _, want := range []string{`languages = ["go", "python"]`, `id = "go-svc"`, `id = "python-tools"`, `checks = ["ruff", "pyright", "metrics"]`} {
 		if !strings.Contains(cfg, want) {
 			t.Errorf("config missing %q:\n%s", want, cfg)
 		}

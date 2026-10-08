@@ -57,13 +57,13 @@ func Projects(repo string, only []string) ([]config.Project, error) {
 		dir := path.Dir(rel)
 		switch name := d.Name(); {
 		case name == "go.mod":
-			add(config.Go, dir, []string{"go-vet", "staticcheck"})
+			add(config.Go, dir, []string{"go-vet", "staticcheck", "metrics"})
 		case name == "pyproject.toml" || name == "setup.py" || name == "setup.cfg" || name == "requirements.txt":
-			add(config.Python, dir, pythonChecks(filepath.Dir(p)))
+			add(config.Python, dir, append(pythonChecks(filepath.Dir(p)), "metrics"))
 		case name == "package.json" || name == "tsconfig.json":
-			add(config.JSTS, dir, jsChecks(filepath.Dir(p)))
+			add(config.JSTS, dir, append(jsChecks(filepath.Dir(p)), "metrics"))
 		case strings.HasSuffix(name, ".csproj"):
-			add(config.CSharp, dir, []string{"dotnet-build"})
+			add(config.CSharp, dir, []string{"dotnet-build", "metrics"})
 		}
 		return nil
 	})
