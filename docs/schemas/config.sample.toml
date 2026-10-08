@@ -1,0 +1,45 @@
+# Sample .pistos/config.toml (schema 1). Validated by internal/config tests.
+schema = 1
+languages = ["go", "python"]
+profile = "balanced"          # fast | balanced | thorough
+
+[execution]
+mode = "native"
+jobs = 4
+timeout = "10m"
+
+[policy]
+block_on = "warning"          # error | warning | info | none
+
+[ai]
+enabled = false
+required = false
+aggregation = "union"
+reuse_results = true
+
+[[ai.discovery]]
+id = "pass-1"
+model = "reviewer-a"
+
+[ai.triage]
+mode = "evidence"             # evidence | model
+
+[models.reviewer-a]
+backend = "openai-compatible"
+endpoint = "http://localhost:8000/v1"
+model = "local-reviewer"
+api_key_env = "PISTOS_REVIEWER_A_KEY"   # name of an environment variable, never the key itself
+timeout = "120s"
+
+[[projects]]
+id = "go-svc"
+root = "svc"
+ecosystem = "go"
+checks = ["go-vet", "staticcheck"]
+options = { tags = "integration" }
+
+[[projects]]
+id = "python-tools"
+root = "tools"
+ecosystem = "python"
+checks = ["ruff", "pyright"]

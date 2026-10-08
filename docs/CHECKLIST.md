@@ -58,3 +58,30 @@ Limitations:
   are covered only through declared `references` and pack shared inputs.
 - Windows process-tree cleanup is implemented with `taskkill /T` but not executed here.
 - Go modules missing from the module cache yield an incomplete result; pistos never downloads them.
+
+## Milestone 3 — persistent feedback and issue ledger
+
+Scope: short tag/reopen commands, atomic feedback mutation, current-report references, ordinary and
+decision tags, strong matching, cross-diff persistence, minimal interactive feedback view.
+Planned tests: persistence across unrelated changes, line shifts, reformatting, cache/state deletion,
+different base/head and `--all`; verified renames; changed cause and nearby defect; reopen; labels and
+deferred; test-only guard; pattern scope preview/confirmation; invalid manual edits; base-policy mode;
+strict references; interactive view; concurrent mutation; AI-shaped findings.
+
+- [x] `feedback.yaml` schema 1 with strict validation, unversioned-file migration, committed sample
+- [x] Locked, atomic, comment-preserving mutation (YAML node patching); invalid files never overwritten
+- [x] Issue ledger with stable local numbers; current report stored for short references
+- [x] `pistos tag N TAG...` (`--reason`, `--scope pattern --paths --yes` with preview), canonical keys accepted
+- [x] `pistos reopen`, `pistos reproduce`, `pistos feedback` (list/show/tag/untag/reason/pattern/delete)
+- [x] Matching: identity, verified rename (blob or git rename from origin tree/commit), pattern scope
+- [x] Guards (`test-only` → test-path guard) and revalidation for changed anchors; nothing hidden on weak evidence
+- [x] Tag/reopen refilter the stored report without running tools
+- [x] `--feedback-from-base` for untrusted changes
+- [x] AI-shaped findings: rewording/model/line changes keep decisions; other defects stay visible
+- [x] Fixed a real racy-git bug: the temporary index now keeps the original mtime (regression test)
+
+Limitations:
+- Symbols are derived for Go (AST) and Python (indentation); other languages fall back to
+  path + anchor line + ordinal identity.
+- Two identical anchor lines in one symbol are distinguished only by order (ordinal).
+- Rename verification needs either an unchanged file blob or a locally available origin tree/commit.

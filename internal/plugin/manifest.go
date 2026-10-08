@@ -8,8 +8,8 @@ import (
 	"path"
 	"regexp"
 	"sort"
-	"strings"
 
+	"example.com/pistos/internal/fsutil"
 	"example.com/pistos/internal/packs"
 )
 
@@ -147,37 +147,11 @@ func (m *Manifest) Family(tool, rule string) string {
 // IsTestPath classifies a project-relative path using the pack's test globs.
 func (m *Manifest) IsTestPath(rel string) bool {
 	for _, g := range m.TestPaths {
-		if MatchGlob(g, rel) {
+		if fsutil.MatchGlob(g, rel) {
 			return true
 		}
 	}
 	return false
-}
-
-// MatchGlob supports "*" within a segment and "**" across segments.
-func MatchGlob(pattern, name string) bool {
-	return matchSegments(strings.Split(pattern, "/"), strings.Split(name, "/"))
-}
-
-func matchSegments(pat, name []string) bool {
-	for len(pat) > 0 {
-		if pat[0] == "**" {
-			for i := 0; i <= len(name); i++ {
-				if matchSegments(pat[1:], name[i:]) {
-					return true
-				}
-			}
-			return false
-		}
-		if len(name) == 0 {
-			return false
-		}
-		if ok, _ := path.Match(pat[0], name[0]); !ok {
-			return false
-		}
-		pat, name = pat[1:], name[1:]
-	}
-	return len(name) == 0
 }
 
 func contains(list []string, s string) bool {

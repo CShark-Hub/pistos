@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"example.com/pistos/internal/config"
+	"example.com/pistos/internal/feedback"
 	"example.com/pistos/internal/finding"
 	"example.com/pistos/internal/fsutil"
 	"example.com/pistos/internal/plugin"
@@ -34,6 +35,9 @@ type Options struct {
 	Jobs    int
 	// Progress receives human-readable progress lines; nil discards them.
 	Progress func(string)
+	// FeedbackFromBase applies the decisions committed in the baseline instead of the working copy,
+	// so an analyzed change cannot exempt itself.
+	FeedbackFromBase bool
 }
 
 // ConfigError marks failures caused by invalid configuration or arguments (exit code 2).
@@ -141,7 +145,17 @@ func Run(ctx context.Context, o Options) (*finding.Envelope, error) {
 		rep.Coverage.Capabilities, rep.Issues = assemble(results, scope, e.manifests, projects)
 	}
 
-	Finalize(rep, cfg.Policy.BlockOn, nil)
+	fb, note, err := e.loadFeedback(ctx, scope)
+	if err != nil {
+		return nil, &ConfigError{err}
+	}
+	if note != "" {
+		rep.Coverage.Capabilities = append(rep.Coverage.Capabilities, finding.CapabilityResult{
+			Capability: "feedback-policy", Project: "-", Side: sideHead, Status: finding.StatusComplete, Limitations: []string{note},
+		})
+	}
+	rep.Feedback = fb.Hash()
+	Finalize(rep, cfg.Policy.BlockOn, feedback.NewMatcher(fb, e.matchEnvironment(ctx, scope.HeadTree)).Apply)
 
 	snapshot.Prune(e.treeRoot, 8)
 	env := &finding.Envelope{Canonical: rep}
@@ -171,7 +185,7 @@ func (e *engine) resolveScope(ctx context.Context) (finding.Scope, []snapshot.Ch
 		if err != nil {
 			return s, nil, &ConfigError{err}
 		}
-		s.Mode, s.HeadRef, s.HeadTree, headCommit = "commit", e.opts.Head, tree, c
+		s.Mode, s.HeadRef, s.HeadTree, s.HeadCommit, headCommit = "commit", e.opts.Head, tree, c, c
 	} else {
 		tree, err := e.git.WorkingTree(ctx)
 		if err != nil {

@@ -1,6 +1,7 @@
 package config
 
 import (
+	"os"
 	"strings"
 	"testing"
 )
@@ -104,5 +105,15 @@ func TestRenderedConfigRoundTrips(t *testing.T) {
 	src := RenderConfig([]string{Go, CSharp}, []Project{{ID: "go", Root: ".", Ecosystem: Go, Checks: []string{"go-vet"}}})
 	if _, err := Parse([]byte(src)); err != nil {
 		t.Fatalf("init output must validate: %v\n%s", err, src)
+	}
+}
+
+func TestSampleConfigValidates(t *testing.T) {
+	b, err := os.ReadFile("../../docs/schemas/config.sample.toml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Parse(b); err != nil {
+		t.Fatal(err)
 	}
 }

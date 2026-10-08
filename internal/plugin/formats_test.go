@@ -3,6 +3,8 @@ package plugin
 import (
 	"strings"
 	"testing"
+
+	"example.com/pistos/internal/fsutil"
 )
 
 const vetMixed = `# ex.com/a/p
@@ -106,7 +108,7 @@ func TestMatchGlob(t *testing.T) {
 		{"**/testdata/**", "x/data/f.go", false},
 		{"tests/**", "tests/a/b.py", true},
 	} {
-		if got := MatchGlob(tc.pat, tc.name); got != tc.want {
+		if got := fsutil.MatchGlob(tc.pat, tc.name); got != tc.want {
 			t.Errorf("%s %s = %v", tc.pat, tc.name, got)
 		}
 	}

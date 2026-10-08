@@ -75,6 +75,7 @@ independently of uncommitted changes. --all reviews the whole working snapshot.`
 	f.StringVar(&format, "format", "text", "text, json or canonical-json")
 	f.BoolVar(&includeIgnored, "include-ignored", false, "also list issues suppressed by feedback")
 	f.BoolVar(&includeExisting, "include-existing", false, "also list issues already present in the baseline")
+	f.BoolVar(&o.FeedbackFromBase, "feedback-from-base", false, "apply the baseline's committed decisions (for untrusted changes)")
 	f.BoolVarP(&verbose, "verbose", "v", false, "print progress to stderr")
 	return cmd
 }

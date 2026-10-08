@@ -6,7 +6,9 @@ import (
 	"encoding/hex"
 	"io"
 	"os"
+	"path"
 	"path/filepath"
+	"strings"
 )
 
 // WriteFileAtomic writes via a temporary sibling and rename so readers never see partial content.
@@ -65,4 +67,30 @@ func HashStrings(parts ...string) string {
 		b[i] = []byte(p)
 	}
 	return HashBytes(b...)
+}
+
+// MatchGlob matches slash-separated paths; "*" stays within a segment and "**" spans segments.
+func MatchGlob(pattern, name string) bool {
+	return matchSegments(strings.Split(pattern, "/"), strings.Split(name, "/"))
+}
+
+func matchSegments(pat, name []string) bool {
+	for len(pat) > 0 {
+		if pat[0] == "**" {
+			for i := 0; i <= len(name); i++ {
+				if matchSegments(pat[1:], name[i:]) {
+					return true
+				}
+			}
+			return false
+		}
+		if len(name) == 0 {
+			return false
+		}
+		if ok, _ := path.Match(pat[0], name[0]); !ok {
+			return false
+		}
+		pat, name = pat[1:], name[1:]
+	}
+	return len(name) == 0
 }

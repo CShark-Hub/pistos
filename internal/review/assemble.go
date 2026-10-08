@@ -70,18 +70,20 @@ func gated(change string) bool { return change != ChangeExisting }
 
 // Finalize recomputes dispositions, blocking flags and the verdict. It is pure so a stored report
 // can be refiltered after a feedback change without rerunning any tool or model.
-func Finalize(rep *finding.Report, blockOn string, apply func(*finding.Issue)) {
+func Finalize(rep *finding.Report, blockOn string, apply func([]finding.Issue)) {
 	threshold := finding.Severity(blockOn).Rank()
 	if blockOn == "none" {
 		threshold = 99
 	}
+	for i := range rep.Issues {
+		rep.Issues[i].Disposition = finding.Disposition{State: finding.DispActive}
+	}
+	if apply != nil {
+		apply(rep.Issues)
+	}
 	blocking := 0
 	for i := range rep.Issues {
 		is := &rep.Issues[i]
-		is.Disposition = finding.Disposition{State: finding.DispActive}
-		if apply != nil {
-			apply(is)
-		}
 		is.Blocking = is.Lane == finding.LaneDeterministic && gated(is.Change) &&
 			is.Disposition.State != finding.DispSuppressed && is.Severity.Rank() >= threshold
 		if is.Blocking {

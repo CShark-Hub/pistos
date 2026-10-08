@@ -1,0 +1,41 @@
+# Sample .pistos/feedback.yaml (schema 1). Validated by internal/feedback tests.
+schema: 1
+decisions:
+  # Written by `pistos tag 47 irrelevant`; selectors are generated, the reason is optional.
+  - id: d-f9fd175e2e
+    tags: [irrelevant]
+    reason: intentional for demo
+    scope: issue
+    subject: k1-4ef0192ae08ef33de9b5
+    match:
+      project: go-svc
+      path: svc/main.go
+      symbol: greet
+      family: go-vet/printf
+      anchor: bb08338833d43903
+      ordinal: 0
+      aliases: [staticcheck/SA5009]
+      file_blob: 47e481f433938ee14d890e8066d35db5a06d98a6
+    origin:
+      tree: 4dfbf82a04200aa9c9f8d880be134200670969d3
+      commit: 584013aa6334f2a5e0d823240e47fe7ae7ddd83f
+    version: 1
+  # Written by `pistos tag N test-only accepted-risk`; the guard expires the decision if the code
+  # stops being test code.
+  - id: d-0a1b2c3d4e
+    tags: [accepted-risk, test-only]
+    scope: issue
+    subject: k1-0000000000000000aaaa
+    match: {project: go-svc, path: svc/fixture_test.go, symbol: vulnerableFixture, family: go-vet/printf, anchor: 1234567890abcdef, ordinal: 0}
+    guards: {test_path: true}
+    version: 1
+  # Explicit rule/pattern preference chosen in `pistos feedback` after a preview.
+  - id: d-5e6f7a8b9c
+    tags: [irrelevant]
+    reason: generated code is reviewed upstream
+    scope: pattern
+    pattern:
+      project: go-svc
+      family: go-vet/printf
+      paths: ["svc/gen/**"]
+    version: 1

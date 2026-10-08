@@ -105,6 +105,7 @@ type Scope struct {
 	Mode         string   `json:"mode"`
 	BaseRef      string   `json:"base_ref,omitempty"`
 	HeadRef      string   `json:"head_ref,omitempty"`
+	HeadCommit   string   `json:"head_commit,omitempty"`
 	BaseCommit   string   `json:"base_commit,omitempty"`
 	BaseTree     string   `json:"base_tree,omitempty"`
 	HeadTree     string   `json:"head_tree"`

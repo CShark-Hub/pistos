@@ -87,8 +87,12 @@ func (g Git) WorkingTree(ctx context.Context) (string, error) {
 	}
 	tmpPath := tmp.Name()
 	defer os.Remove(tmpPath)
+	var indexMod time.Time
 	if src, err := os.Open(indexPath); err == nil {
 		_, err = io.Copy(tmp, src)
+		if fi, serr := src.Stat(); serr == nil {
+			indexMod = fi.ModTime()
+		}
 		src.Close()
 		if err != nil {
 			tmp.Close()
@@ -99,6 +103,13 @@ func (g Git) WorkingTree(ctx context.Context) (string, error) {
 		return "", err
 	}
 	tmp.Close()
+	// Git treats entries modified no earlier than the index file as "racily clean" and re-hashes them.
+	// A fresh copy would look newer than every file and hide same-size edits made right after a commit.
+	if !indexMod.IsZero() {
+		if err := os.Chtimes(tmpPath, indexMod, indexMod); err != nil {
+			return "", err
+		}
+	}
 	env := []string{"GIT_INDEX_FILE=" + tmpPath}
 	if fi, _ := os.Stat(tmpPath); fi.Size() == 0 {
 		os.Remove(tmpPath)
@@ -159,6 +170,17 @@ func (g Git) ObjectID(ctx context.Context, tree, p string) string {
 		return ""
 	}
 	return id
+}
+
+// Exists reports whether an object is present locally (trees from old working snapshots may be pruned).
+func (g Git) Exists(ctx context.Context, id string) bool {
+	_, err := g.run(ctx, nil, nil, "cat-file", "-e", id)
+	return err == nil
+}
+
+// Show returns the content of path in tree.
+func (g Git) Show(ctx context.Context, tree, p string) ([]byte, error) {
+	return g.run(ctx, nil, nil, "cat-file", "blob", tree+":"+p)
 }
 
 // Materialize extracts tree into dir once; an existing complete materialization is reused because

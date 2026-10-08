@@ -4,7 +4,9 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
+	"time"
 
 	"example.com/pistos/internal/testutil/gitrepo"
 )
@@ -104,4 +106,30 @@ func TestRepositoryWithoutCommits(t *testing.T) {
 	if err != nil || len(changes) != 1 || changes[0].Path != "a.go" {
 		t.Fatalf("%+v %v", changes, err)
 	}
+}
+
+// The bug needs a commit and a same-size edit within one second, then a snapshot in a later second:
+// a freshly copied index would look newer than the edit and git would trust the stale stat data.
+func TestWorkingTreeSeesSameSizeEditRightAfterCommit(t *testing.T) {
+	ctx := context.Background()
+	for attempt := 0; attempt < 5; attempt++ {
+		r := gitrepo.New(t, "go-clean")
+		g := Git{Repo: r.Dir}
+		_, headTree, _ := g.Commit(ctx, "HEAD")
+		committed := time.Now().Unix()
+		r.Write("main.go", strings.Replace(r.Read("main.go"), "hello, %s", "hello, %d", 1))
+		if time.Now().Unix() != committed {
+			continue
+		}
+		time.Sleep(time.Until(time.Unix(committed+1, 50_000_000)))
+		tree, err := g.WorkingTree(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if tree == headTree {
+			t.Fatal("same-size edit right after a commit was missed (racy index copy)")
+		}
+		return
+	}
+	t.Skip("could not place commit and edit within one second")
 }
