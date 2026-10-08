@@ -1,0 +1,2 @@
+[{"path": "orders.py", "line": 1, "label": "mutable default argument shares state between calls"},
+ {"path": "orders.py", "line": 7, "label": "ZeroDivisionError for an empty list"}]

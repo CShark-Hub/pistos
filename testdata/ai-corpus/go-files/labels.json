@@ -1,0 +1,2 @@
+[{"path": "files.go", "line": 9, "label": "file handle is never closed (resource leak)"},
+ {"path": "files.go", "line": 18, "label": "scanner error is ignored"}]

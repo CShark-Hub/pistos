@@ -53,6 +53,8 @@ jobs:
       - name: Staticcheck for the live Go test
         run: go install honnef.co/go/tools/cmd/staticcheck@v0.8.1 && echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
       - run: go test -count=1 ./...
+      - name: Performance budget
+        run: PISTOS_PERF_BUDGET=1 go test -count=1 ./internal/cli -run TestPerformanceBudget -v
 
   # Native/container equivalence, restricted-profile enforcement and container cleanup.
   docker:

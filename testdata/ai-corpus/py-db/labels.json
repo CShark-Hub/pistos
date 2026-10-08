@@ -1,0 +1,1 @@
+[{"path": "db.py", "line": 5, "label": "SQL injection through string formatting"}]

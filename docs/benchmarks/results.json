@@ -1,0 +1,148 @@
+{
+  "environment": {
+    "arch": "arm64",
+    "cpu": "0xd87",
+    "cpus": "20",
+    "date": "2026-10-08",
+    "dotnet": "10.0.401",
+    "go": "go version go1.26.9 linux/arm64",
+    "memory": "127535272 kB",
+    "node": "v24.21.0",
+    "os": "linux",
+    "pistos": "pistos version 0.1.0-dev",
+    "python": "Python 3.12.3"
+  },
+  "scenarios": [
+    {
+      "scenario": "go-small",
+      "files": 1,
+      "lines": 11,
+      "install_ms": 34.526,
+      "noop_review": {
+        "p50_ms": 17.697,
+        "p95_ms": 18.762,
+        "runs": 10,
+        "peak_total_rss_kb": 10544
+      },
+      "cold_review": {
+        "p50_ms": 781.607,
+        "p95_ms": 781.607,
+        "runs": 3,
+        "peak_total_rss_kb": 264196
+      },
+      "warm_function_edit": {
+        "p50_ms": 113.457,
+        "p95_ms": 114.001,
+        "runs": 5,
+        "peak_total_rss_kb": 263140
+      },
+      "three_run_canonical_identical": true
+    },
+    {
+      "scenario": "go-medium (pistos itself)",
+      "files": 89,
+      "lines": 15615,
+      "install_ms": 34.265,
+      "noop_review": {
+        "p50_ms": 26.487,
+        "p95_ms": 28.954,
+        "runs": 10,
+        "peak_total_rss_kb": 10756
+      },
+      "cold_review": {
+        "p50_ms": 1758.343,
+        "p95_ms": 1758.343,
+        "runs": 3,
+        "peak_total_rss_kb": 548268
+      },
+      "warm_function_edit": {
+        "p50_ms": 988.732,
+        "p95_ms": 1056.191,
+        "runs": 5,
+        "peak_total_rss_kb": 532384
+      },
+      "three_run_canonical_identical": true
+    },
+    {
+      "scenario": "python-small",
+      "files": 3,
+      "lines": 11,
+      "install_ms": 7153.611,
+      "noop_review": {
+        "p50_ms": 19.157,
+        "p95_ms": 20.457,
+        "runs": 10,
+        "peak_total_rss_kb": 10688
+      },
+      "cold_review": {
+        "p50_ms": 471.011,
+        "p95_ms": 471.011,
+        "runs": 3,
+        "peak_total_rss_kb": 428212
+      },
+      "warm_function_edit": {
+        "p50_ms": 476.757,
+        "p95_ms": 486.711,
+        "runs": 5,
+        "peak_total_rss_kb": 722156
+      },
+      "three_run_canonical_identical": true
+    },
+    {
+      "scenario": "jsts-small",
+      "files": 3,
+      "lines": 7,
+      "install_ms": 1376.422,
+      "noop_review": {
+        "p50_ms": 19.23,
+        "p95_ms": 19.776,
+        "runs": 10,
+        "peak_total_rss_kb": 10580
+      },
+      "cold_review": {
+        "p50_ms": 247.703,
+        "p95_ms": 247.703,
+        "runs": 3,
+        "peak_total_rss_kb": 162992
+      },
+      "warm_function_edit": {
+        "p50_ms": 271.835,
+        "p95_ms": 292.677,
+        "runs": 5,
+        "peak_total_rss_kb": 237672
+      },
+      "three_run_canonical_identical": true
+    },
+    {
+      "scenario": "csharp-small",
+      "files": 2,
+      "lines": 19,
+      "install_ms": 1807.59,
+      "noop_review": {
+        "p50_ms": 18.232,
+        "p95_ms": 19.3,
+        "runs": 10,
+        "peak_total_rss_kb": 10620
+      },
+      "cold_review": {
+        "p50_ms": 1592.6,
+        "p95_ms": 1592.6,
+        "runs": 3,
+        "peak_total_rss_kb": 324532
+      },
+      "warm_function_edit": {
+        "p50_ms": 1673.526,
+        "p95_ms": 1711.246,
+        "runs": 5,
+        "peak_total_rss_kb": 328416
+      },
+      "three_run_canonical_identical": true
+    }
+  ],
+  "startup": {
+    "p50_ms": 2.657,
+    "p95_ms": 3.157,
+    "runs": 25,
+    "peak_total_rss_kb": 0
+  }
+}

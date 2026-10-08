@@ -1,0 +1,2 @@
+[{"path": "lookup.go", "line": 7, "label": "nil dereference when id is missing"},
+ {"path": "lookup.go", "line": 12, "label": "off-by-one: loop reads xs[n]"}]

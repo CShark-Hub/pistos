@@ -189,6 +189,9 @@ func TestCacheReuseAndInvalidation(t *testing.T) {
 		{"build tags", func() {
 			r.Write(".pistos/config.toml", strings.Replace(configFor(goProject), "checks", "options = { tags = \"integration\" }\nchecks", 1))
 		}},
+		{"target", func() {
+			r.Write(".pistos/config.toml", strings.Replace(configFor(goProject), "checks", "options = { tags = \"integration\", goos = \"windows\" }\nchecks", 1))
+		}},
 	} {
 		name := step.name
 		step.edit()
