@@ -27,11 +27,17 @@ func TestPerformanceBudget(t *testing.T) {
 	}
 	r := setupGo(t, "go-clean", configFor(strings.Replace(goProject, `checks = ["go-vet"]`, `checks = ["go-vet", "metrics"]`, 1)))
 	runReview(t, r.Dir)
-	var noop, warm []time.Duration
+	var noop, hook, warm []time.Duration
 	for i := 0; i < 10; i++ {
 		start := time.Now()
 		run(t, r.Dir, "review")
 		noop = append(noop, time.Since(start))
+	}
+	// A pre-commit hook with nothing staged is the most frequent hook run.
+	for i := 0; i < 10; i++ {
+		start := time.Now()
+		run(t, r.Dir, "hooks", "run", "pre-commit")
+		hook = append(hook, time.Since(start))
 	}
 	for i := 0; i < 5; i++ {
 		r.Write("main.go", r.Read("main.go")+"\nfunc edit"+strings.Repeat("x", i+1)+"() {}\n")
@@ -42,8 +48,11 @@ func TestPerformanceBudget(t *testing.T) {
 	if got := p95(noop); got > budgetNoOp {
 		t.Errorf("no-op review p95 %s exceeds budget %s", got, budgetNoOp)
 	}
+	if got := p95(hook); got > budgetNoOp {
+		t.Errorf("no-op pre-commit hook p95 %s exceeds budget %s", got, budgetNoOp)
+	}
 	if got := p95(warm); got > budgetWarmEdit {
 		t.Errorf("warm function edit p95 %s exceeds budget %s", got, budgetWarmEdit)
 	}
-	t.Logf("no-op p95 %s, warm edit p95 %s", p95(noop), p95(warm))
+	t.Logf("no-op p95 %s, no-op pre-commit hook p95 %s, warm edit p95 %s", p95(noop), p95(hook), p95(warm))
 }

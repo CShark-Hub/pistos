@@ -1,0 +1,20 @@
+pistos: FAIL — 5 blocking, 0 advisory (working tree vs merge-base(main))
+BLOCKING — fix before finishing
+#3 error go-vet/printf  internal/x/y.go:42:7
+   Printf format %d has arg s of wrong type string
+     40 |     line40()
+     41 |     line41()
+   > 42 |     fmt.Printf("%d", s)
+     43 |     line43()
+     44 |     line44()
+   verify: go vet ./internal/x
+#4 error go-vet/printf  internal/x/y.go:43:7
+   Printf format %d has arg s of wrong type string
+     41 |     line41()
+     42 |     fmt.Printf("%d", s)
+   > 43 |     line43()
+     44 |     line44()
+     45 |     line45()
+   verify: go vet ./internal/x
++3 more → .pistos/state/report.html
+Do not edit .pistos/ or tag issues. If you think an issue is wrong, tell the user its number.

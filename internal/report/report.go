@@ -14,6 +14,8 @@ import (
 type TextOptions struct {
 	IncludeIgnored  bool
 	IncludeExisting bool
+	// Brief lists only checks that did not complete and omits the AI coverage line (git hooks).
+	Brief bool
 }
 
 // Text renders the human summary: scope, coverage, issues and verdict.
@@ -39,8 +41,23 @@ func Text(w io.Writer, env *finding.Envelope, o TextOptions) {
 	}
 
 	if len(r.Coverage.Capabilities) > 0 {
-		fmt.Fprintf(w, "checks   (profile %s)\n", r.Coverage.Profile)
+		if o.Brief {
+			complete, skipped := 0, 0
+			for _, c := range r.Coverage.Capabilities {
+				if c.Status.Completed() {
+					complete++
+				} else if c.Status == finding.StatusNotRequested {
+					skipped++
+				}
+			}
+			fmt.Fprintf(w, "checks   %d complete, %d not requested by profile %s\n", complete, skipped, r.Coverage.Profile)
+		} else {
+			fmt.Fprintf(w, "checks   (profile %s)\n", r.Coverage.Profile)
+		}
 		for _, c := range r.Coverage.Capabilities {
+			if o.Brief && (c.Status.Completed() || c.Status == finding.StatusNotRequested) {
+				continue
+			}
 			req := ""
 			if c.Required {
 				req = " required"
@@ -58,7 +75,9 @@ func Text(w io.Writer, env *finding.Envelope, o TextOptions) {
 			}
 		}
 	}
-	fmt.Fprintf(w, "ai       %s\n", r.Coverage.AI)
+	if !o.Brief {
+		fmt.Fprintf(w, "ai       %s\n", r.Coverage.AI)
+	}
 
 	var shown, hidden, existing int
 	for _, is := range r.Issues {

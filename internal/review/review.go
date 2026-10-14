@@ -41,6 +41,11 @@ type Options struct {
 	// FeedbackFromBase applies the decisions committed in the baseline instead of the working copy,
 	// so an analyzed change cannot exempt itself.
 	FeedbackFromBase bool
+	// Staged reviews the index instead of the working snapshot. IndexFile is the index a git hook
+	// was given through GIT_INDEX_FILE ("" for the repository's own index); it is never read from
+	// the environment here, so an inherited value cannot redirect other git commands.
+	Staged    bool
+	IndexFile string
 }
 
 // ConfigError marks failures caused by invalid configuration or arguments (exit code 2).
@@ -125,6 +130,9 @@ func Run(ctx context.Context, o Options) (*finding.Envelope, error) {
 	}
 	if o.Head != "" && o.Base == "" {
 		return nil, &ConfigError{errors.New("--head requires --base")}
+	}
+	if o.Staged && (o.All || o.Head != "") {
+		return nil, &ConfigError{errors.New("--staged reviews the index and cannot be combined with --all or --head")}
 	}
 	if o.All && (o.Base != "" || o.Head != "") {
 		return nil, &ConfigError{errors.New("--all reviews the working snapshot as a whole and cannot be combined with --base/--head")}
@@ -226,6 +234,15 @@ func (e *engine) resolveScope(ctx context.Context) (finding.Scope, []snapshot.Ch
 			return s, nil, &ConfigError{err}
 		}
 		s.Mode, s.HeadRef, s.HeadTree, s.HeadCommit, headCommit = "commit", e.opts.Head, tree, c, c
+	} else if e.opts.Staged {
+		tree, err := e.git.IndexTree(ctx, e.opts.IndexFile)
+		if err != nil {
+			return s, nil, err
+		}
+		s.Mode, s.HeadRef, s.HeadTree = "staged", "(index)", tree
+		if e.git.HasHead(ctx) {
+			headCommit, _, _ = e.git.Commit(ctx, "HEAD")
+		}
 	} else {
 		tree, err := e.git.WorkingTree(ctx)
 		if err != nil {

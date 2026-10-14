@@ -1,0 +1,1 @@
+pistos: PASS — required deterministic checks completed with no active blocking issues (staged changes vs HEAD)

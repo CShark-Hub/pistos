@@ -90,7 +90,7 @@ func (a *app) rootCommand() *cobra.Command {
 	}
 	root.PersistentFlags().StringVarP(&a.repo, "repo", "C", "", "repository root (default: enclosing git repository)")
 	root.AddCommand(a.initCommand(), a.doctorCommand(), a.pluginsCommand(), a.reviewCommand(),
-		a.tagCommand(), a.reopenCommand(), a.feedbackCommand(), a.reproduceCommand(), a.factsCommand(), a.reportCommand(), a.aiCommand())
+		a.tagCommand(), a.reopenCommand(), a.feedbackCommand(), a.reproduceCommand(), a.factsCommand(), a.reportCommand(), a.aiCommand(), a.hooksCommand())
 	return root
 }
 
@@ -111,12 +111,17 @@ func (a *app) repoRoot() (string, error) {
 	if a.repo != "" {
 		return abs, nil
 	}
+	return enclosingRepo(abs), nil
+}
+
+// enclosingRepo returns the nearest directory at or above abs that contains .git, or abs itself.
+func enclosingRepo(abs string) string {
 	for dir := abs; ; dir = filepath.Dir(dir) {
 		if _, err := os.Stat(filepath.Join(dir, ".git")); err == nil {
-			return dir, nil
+			return dir
 		}
 		if filepath.Dir(dir) == dir {
-			return abs, nil
+			return abs
 		}
 	}
 }

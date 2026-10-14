@@ -27,7 +27,7 @@ func (g Git) run(ctx context.Context, env []string, stdin io.Reader, args ...str
 	cmd := exec.CommandContext(ctx, "git", append([]string{"-c", "gc.auto=0", "-c", "core.quotepath=off"}, args...)...)
 	cmd.Dir = g.Repo
 	// Optional locks would let read-only commands refresh the user's index.
-	cmd.Env = append(append(os.Environ(), "GIT_OPTIONAL_LOCKS=0", "LC_ALL=C"), env...)
+	cmd.Env = append(append(gitEnviron(), "GIT_OPTIONAL_LOCKS=0", "LC_ALL=C"), env...)
 	cmd.Stdin = stdin
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
@@ -36,6 +36,24 @@ func (g Git) run(ctx context.Context, env []string, stdin io.Reader, args ...str
 		return out, fmt.Errorf("git %s: %v: %s", strings.Join(args, " "), err, strings.TrimSpace(stderr.String()))
 	}
 	return out, nil
+}
+
+// gitEnviron is the parent environment without GIT_INDEX_FILE. Git sets it for hooks (a temporary
+// index during `commit -a` / `commit <paths>`); inherited, it would silently redirect every command
+// to that index. Only IndexTree reads it, and only when the caller passes it explicitly.
+func gitEnviron() []string {
+	var env []string
+	for _, kv := range os.Environ() {
+		if !strings.HasPrefix(kv, "GIT_INDEX_FILE=") {
+			env = append(env, kv)
+		}
+	}
+	return env
+}
+
+// Output runs a git command in the repository and returns its trimmed standard output.
+func (g Git) Output(ctx context.Context, args ...string) (string, error) {
+	return g.output(ctx, args...)
 }
 
 func (g Git) output(ctx context.Context, args ...string) (string, error) {
@@ -74,19 +92,69 @@ func (g Git) MergeBase(ctx context.Context, a, b string) (string, error) {
 // WorkingTree writes the working snapshot (staged, unstaged and untracked non-ignored files) as a tree
 // object using a throwaway copy of the index, so the user's index stays untouched.
 func (g Git) WorkingTree(ctx context.Context) (string, error) {
-	indexPath, err := g.output(ctx, "rev-parse", "--git-path", "index")
+	indexPath, err := g.indexPath(ctx)
 	if err != nil {
 		return "", err
 	}
-	if !filepath.IsAbs(indexPath) {
+	tmpPath, err := copyIndex(indexPath)
+	if err != nil {
+		return "", err
+	}
+	defer os.Remove(tmpPath)
+	env := []string{"GIT_INDEX_FILE=" + tmpPath}
+	if _, err := g.run(ctx, env, nil, "add", "-A", "--", "."); err != nil {
+		return "", err
+	}
+	out, err := g.run(ctx, env, nil, "write-tree")
+	return strings.TrimSpace(string(out)), err
+}
+
+// IndexTree writes the staged snapshot as a tree object. indexFile is the index git handed to a hook
+// through GIT_INDEX_FILE (relative paths resolve against the repository); empty means the repository's
+// own index. The tree is written from a copy: write-tree would otherwise update the cache-tree in
+// that index, and during a commit the real index is locked by git.
+func (g Git) IndexTree(ctx context.Context, indexFile string) (string, error) {
+	indexPath := indexFile
+	if indexPath == "" {
+		p, err := g.indexPath(ctx)
+		if err != nil {
+			return "", err
+		}
+		indexPath = p
+	} else if !filepath.IsAbs(indexPath) {
 		indexPath = filepath.Join(g.Repo, indexPath)
 	}
+	if _, err := os.Stat(indexPath); err != nil && indexFile != "" {
+		return "", fmt.Errorf("GIT_INDEX_FILE: %w", err)
+	}
+	tmpPath, err := copyIndex(indexPath)
+	if err != nil {
+		return "", err
+	}
+	defer os.Remove(tmpPath)
+	out, err := g.run(ctx, []string{"GIT_INDEX_FILE=" + tmpPath}, nil, "write-tree")
+	return strings.TrimSpace(string(out)), err
+}
+
+func (g Git) indexPath(ctx context.Context) (string, error) {
+	p, err := g.output(ctx, "rev-parse", "--git-path", "index")
+	if err != nil {
+		return "", err
+	}
+	if !filepath.IsAbs(p) {
+		p = filepath.Join(g.Repo, p)
+	}
+	return p, nil
+}
+
+// copyIndex copies an index file to a new temporary path (absent when the source does not exist, which
+// git reads as an empty index). The caller removes it.
+func copyIndex(indexPath string) (string, error) {
 	tmp, err := os.CreateTemp("", "pistos-index-*")
 	if err != nil {
 		return "", err
 	}
 	tmpPath := tmp.Name()
-	defer os.Remove(tmpPath)
 	var indexMod time.Time
 	if src, err := os.Open(indexPath); err == nil {
 		_, err = io.Copy(tmp, src)
@@ -96,10 +164,12 @@ func (g Git) WorkingTree(ctx context.Context) (string, error) {
 		src.Close()
 		if err != nil {
 			tmp.Close()
+			os.Remove(tmpPath)
 			return "", err
 		}
 	} else if !errors.Is(err, os.ErrNotExist) {
 		tmp.Close()
+		os.Remove(tmpPath)
 		return "", err
 	}
 	tmp.Close()
@@ -107,18 +177,14 @@ func (g Git) WorkingTree(ctx context.Context) (string, error) {
 	// A fresh copy would look newer than every file and hide same-size edits made right after a commit.
 	if !indexMod.IsZero() {
 		if err := os.Chtimes(tmpPath, indexMod, indexMod); err != nil {
+			os.Remove(tmpPath)
 			return "", err
 		}
 	}
-	env := []string{"GIT_INDEX_FILE=" + tmpPath}
 	if fi, _ := os.Stat(tmpPath); fi.Size() == 0 {
 		os.Remove(tmpPath)
 	}
-	if _, err := g.run(ctx, env, nil, "add", "-A", "--", "."); err != nil {
-		return "", err
-	}
-	out, err := g.run(ctx, env, nil, "write-tree")
-	return strings.TrimSpace(string(out)), err
+	return tmpPath, nil
 }
 
 type Change struct {
@@ -218,7 +284,7 @@ func (g Git) Materialize(ctx context.Context, tree, dir string) error {
 
 	cmd := exec.CommandContext(ctx, "git", "archive", "--format=tar", tree)
 	cmd.Dir = g.Repo
-	cmd.Env = append(os.Environ(), "GIT_OPTIONAL_LOCKS=0")
+	cmd.Env = append(gitEnviron(), "GIT_OPTIONAL_LOCKS=0")
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
 		return err

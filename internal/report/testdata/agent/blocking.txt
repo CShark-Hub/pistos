@@ -1,0 +1,15 @@
+pistos: FAIL — 1 blocking, 1 advisory (working tree vs merge-base(main))
+BLOCKING — fix before finishing
+#4 error go-vet/printf  internal/x/y.go:42:7
+   Printf format %d has arg s of wrong type string
+     40 |     line40()
+     41 |     line41()
+   > 42 |     fmt.Printf("%d", s)
+     43 |     line43()
+     44 |     line44()
+   verify: go vet ./internal/x
+ADVISORY — not blocking; AI items are hypotheses, confirm before changing code
+#3 warning nil-dereference  internal/a.go:88  (AI, 2/3 passes, triage: verified)
+   user may be nil when the cache misses
+   failing scenario: Lookup returns nil, Name() dereferences it
+Do not edit .pistos/ or tag issues. If you think an issue is wrong, tell the user its number.

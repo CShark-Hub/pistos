@@ -246,3 +246,56 @@ Not done / not verified (also in `docs/release-readiness.md`):
 - [x] `pistos ai setup`: provider (OpenAI-compatible or OpenRouter), endpoint normalized/validated/reachability-checked, key read without echo and verified without spending tokens (3 attempts), models per review (default 3), model per pass from the endpoint's catalog (search, prices, JSON-mode filter on OpenRouter), triage mode/model, preview, then rewrite of the AI tables only
 - [x] Keys: config stores only the variable name; optional user-level credentials file (0600, outside the repository) used when the variable is unset
 - [x] `pistos plugins install` offers the setup on interactive terminals when AI is off
+
+## Milestone 9 — agent output, staged review and git/agent hooks
+
+Scope: `--format agent` for coding agents, `review --staged` (index vs HEAD, honoring `$GIT_INDEX_FILE`),
+`pistos hooks install|uninstall|status|run` for pre-commit / pre-push, and a Claude Code Stop hook.
+Planned tests: golden agent output (blocking/advisory/incomplete, cap); `--staged` with partially staged
+files, `commit -a`, `commit <path>` through real `git commit` runs; pre-push stdin (new branch, deletion,
+several refs, missing remote sha); idempotent install/uninstall, foreign hooks refused, `core.hooksPath`;
+Claude hook loop guard and exit mapping; no-op hook latency within the perf budget.
+
+- [x] `--format agent`: new/unknown/worsened issues (plus pre-existing ones gating again), blocking first then severity/path/line, ledger numbers, `--max-issues` (default 20) with `+N more → report.html`, ±2-line excerpts, `verify:` from `Reproduce`, AI provenance (passes, triage, failing scenario), incomplete checks, rules footer, one-line PASS; golden tests (blocking/advisory, incomplete, overflow, clean)
+- [x] `review --staged` (index vs HEAD or `merge-base(--base, HEAD)`; `--head`/`--all` rejected): tree written from a copy of `$GIT_INDEX_FILE` or the repository index; `GIT_INDEX_FILE` stripped from every other git call (including `git archive`); tests with a partially staged file and real `git commit -a` / `git commit <path>` through an installed hook running the built binary (user index byte-identical; mutation-checked: ignoring `GIT_INDEX_FILE` makes the test fail)
+- [x] `pistos hooks install|uninstall|status [pre-commit] [pre-push]`: marker script (`command -v` guard, `exec pistos hooks run`), `git rev-parse --git-path hooks` (core.hooksPath tested), foreign hooks refused/kept, husky/lefthook/pre-commit detected with snippets, idempotent; pre-push stdin planning (deletion, new branch via `refs/remotes/<remote>/HEAD`, missing remote sha → tracking ref or skip, several refs)
+- [x] Exit mapping: blocking → 1 (also when incomplete), incomplete/config error warns unless `[hooks] block_on_incomplete` (→ 2), missing binary warns and exits 0, `PISTOS_SKIP_HOOKS=1`, unconfigured repository skips; `[hooks]` table (strict keys, profile validation, defaults, `init` output, sample config)
+- [x] `pistos hooks run claude-stop` (`stop_hook_active` guard, repository from input `cwd`, `--feedback-from-base`, exit 2 + agent report on stderr only for blocking issues); `hooks install claude` prints, `--write` merges into `.claude/settings.local.json` (preserving, idempotent, refuses odd shapes), `uninstall claude`
+- [x] No-op pre-commit hook added to the perf budget test (in-process p95 16 ms vs 300 ms budget; 18 ms for no-op review)
+
+Limitations:
+- Claude Code contract (Stop input fields, exit 2 semantics, settings shape, 600 s default timeout)
+  checked against the hooks documentation, not exercised with a running Claude Code.
+- husky/lefthook/pre-commit snippets are written from their documentation and not run against those
+  tools; the pre-commit framework does not forward pre-push stdin, so only its pre-commit stage is offered.
+- pre-push reviews each ref separately; the last review becomes the current report for `pistos tag`.
+- The perf budget measures the hook in-process; the shell script and process start add to it.
+- `--write` rewrites `settings.local.json` with sorted keys (values preserved).
+- Cancellation exits 130 (non-zero, so git stops), not 1.
+- Hook scripts are POSIX shell; Windows git hooks (Git for Windows' sh) were not run here.
+
+## Milestone 10 — secret scanning pack
+
+Scope: cross-cutting `secrets` pack (gitleaks, `root = "."`, file scope so it runs in the fast profile),
+`gitleaks-json` parser, `Sensitive` findings masked everywhere, secret lines withheld from AI evidence.
+Planned tests: parser fixture; live new-secret blocks / baseline secret does not / `.gitleaksignore` and
+`.gitleaks.toml` respected; the secret string absent from cache, HTML, JSON, SARIF, agent output and AI
+call artifacts; docker equivalence.
+
+- [ ] `secrets` pack (gitleaks via go-install, pinned), accepted in `languages`, added by `init`
+- [ ] `gitleaks-json` parser dropping Match/Secret/Fingerprint
+- [ ] `Sensitive` flag: excerpts withheld in HTML/text/agent, no SARIF snippet, lines withheld from AI evidence
+- [ ] Docker image and third-party license entry
+
+## Milestone 11 — AI review guidelines and spend cap
+
+Scope: `[[ai.instructions]]` (file, optional paths) in the discovery/triage system prompts, read from the
+base tree under `--feedback-from-base`; per-review `max_review_tokens` / `max_review_usd` with model
+prices from `ai setup`, deterministic reservation, spend reporting.
+Planned tests (fake endpoint): path-scoped inclusion, base-tree guidelines, replay invalidation; cap skips
+exactly the last pass, triage skipped → needs-investigation, `ai.required` → incomplete, replays free;
+missing price with a USD cap is a config error; reported spend matches fake usage.
+
+- [ ] `[[ai.instructions]]` with size cap, provenance in AI notes, trust from base tree
+- [ ] Spend meter (reserve before call, settle on usage, failures keep reservation), `--max-ai-usd`
+- [ ] Model prices written by `ai setup`; spend line in text/agent/JSON

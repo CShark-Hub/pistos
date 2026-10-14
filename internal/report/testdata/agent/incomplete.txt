@@ -1,0 +1,3 @@
+pistos: INCOMPLETE — 0 blocking, 0 advisory (working tree vs merge-base(main))
+INCOMPLETE — environment problem, not caused by your change; report it to the user:
+  app/staticcheck (incomplete): tool staticcheck not found (run pistos plugins install)

@@ -104,6 +104,7 @@ func RenderConfig(langs []string, projects []Project) string {
 	b.WriteString("[execution]\nmode = \"native\"\njobs = 4\ntimeout = \"10m\"\n\n")
 	b.WriteString("[policy]\n# New deterministic findings at or above this severity fail the gate (error, warning, info, none).\nblock_on = \"warning\"\n\n")
 	b.WriteString("[metrics]\n# Thresholds for the metrics check (definitions: docs/metrics.md). Advisory unless gate = true.\ngate = false\ncyclomatic = 10\nnesting = 4\nparams = 5\nstatements = 50\n\n")
+	b.WriteString("[hooks]\n# Profiles used by `pistos hooks run` (git hooks: `pistos hooks install`; docs/hooks.md).\n# The fast profile skips project-aware checks such as go vet, tsc and pyright.\npre_commit_profile = \"fast\"\npre_push_profile = \"balanced\"\nclaude_profile = \"fast\"\n# Incomplete reviews (missing tools, failed checks) only warn unless this is true.\nblock_on_incomplete = false\n\n")
 	b.WriteString("[ai]\n# AI review is advisory and disabled until models are configured.\nenabled = false\nrequired = false\naggregation = \"union\"\nreuse_results = true\n")
 	for _, p := range projects {
 		b.WriteString("\n[[projects]]\n")

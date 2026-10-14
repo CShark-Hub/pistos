@@ -5,9 +5,23 @@ linters) and optional bring-your-own-key AI discovery. Deterministic checks deci
 findings are advisory. Human decisions (`pistos tag 47 irrelevant`) persist in a committed
 `.pistos/feedback.yaml` across diffs, commits, cache deletion and model changes.
 
-> Status: milestones 1–8 implemented and verified on Linux arm64; CI on macOS/Windows not yet run.
+> Status: milestones 1–9 implemented and verified on Linux arm64; CI on macOS/Windows not yet run.
 > See [docs/CHECKLIST.md](docs/CHECKLIST.md), [docs/release-readiness.md](docs/release-readiness.md),
 > [docs/limitations.md](docs/limitations.md) and the [tutorial](docs/tutorial.md).
+
+## Prerequisites
+
+- Go 1.26+ to build pistos (CI uses 1.26.9). The binary is CGo-free.
+- Per language pack, only for the languages you review:
+  - Go: the Go toolchain
+  - Python: Python 3 and Node.js (for Pyright)
+  - JS/TS: Node.js and the repository's installed `node_modules`
+  - C#: .NET SDK 8+ (verified with 10.0.401); SDK-style projects only. Reviews never download
+    NuGet packages, so run `dotnet restore` first.
+- Docker, only for `[execution] mode = "docker"`.
+
+Versions CI tests against are pinned in [.github/workflows/ci.yml](.github/workflows/ci.yml); details in
+[docs/install.md](docs/install.md).
 
 ## Quick start
 
@@ -17,6 +31,8 @@ pistos init                  # detect projects, write .pistos/config.toml (never
 pistos plugins install       # explicit tool acquisition; records versions/checksums in .pistos/lock.json
 pistos review                # working tree (staged, unstaged, untracked) against HEAD
 pistos review --base main    # against merge-base(main, HEAD)
+pistos review --staged       # only what the next commit contains (the index)
+pistos hooks install         # git pre-commit (staged) and pre-push hooks; see docs/hooks.md
 pistos tag 3 irrelevant      # persist a decision; the issue stays suppressed in future reviews
 pistos report                # browse the report with code excerpts; select issues to ignore and save
 pistos ai setup              # optional: connect an OpenAI-compatible endpoint or OpenRouter for AI review
@@ -71,7 +87,9 @@ Optional BYOK AI review (`--profile thorough`) runs independent discovery passes
 OpenAI-compatible endpoint, unions and triages their candidates and publishes advisory issues with
 provenance; see [docs/ai.md](docs/ai.md).
 
-Output formats: text, JSON, canonical JSON and SARIF 2.1.0. Analyzers can run natively or in pinned
+Output formats: text, agent (compact, for coding agents), JSON, canonical JSON and SARIF 2.1.0.
+Coding agents can be gated with `pistos review --format agent` or, for Claude Code, a Stop hook
+(`pistos hooks install claude`); see [docs/hooks.md](docs/hooks.md). Analyzers can run natively or in pinned
 per-pack containers (`execution.mode = "docker"`, restricted profile for untrusted code); see
 [docs/install.md](docs/install.md) and [docs/security.md](docs/security.md).
 

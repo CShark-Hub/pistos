@@ -67,6 +67,8 @@ func TestParseRejects(t *testing.T) {
 		"llm vocabulary":   {"[llm]\nenabled = true\n", "unknown keys: llm"},
 		"escaping glob":    {"", "projects[0].exclude"},
 		"bad glob syntax":  {"", "projects[0].include"},
+		"unknown hook key": {"[hooks]\npre_commit = \"fast\"\n", "unknown keys: hooks.pre_commit"},
+		"bad hook profile": {"[hooks]\npre_push_profile = \"slow\"\n", `hooks.pre_push_profile "slow"`},
 	} {
 		t.Run(name, func(t *testing.T) {
 			src := valid + tc.edit
@@ -93,6 +95,16 @@ func TestParseRejects(t *testing.T) {
 				t.Fatalf("want error containing %q, got %v", tc.want, err)
 			}
 		})
+	}
+}
+
+func TestHooksDefaults(t *testing.T) {
+	c, err := Parse([]byte(valid))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if h := c.Hooks; h.PreCommitProfile != "fast" || h.PrePushProfile != "balanced" || h.ClaudeProfile != "fast" || h.BlockOnIncomplete {
+		t.Fatalf("hooks defaults: %+v", h)
 	}
 }
 

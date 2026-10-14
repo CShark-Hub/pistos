@@ -35,6 +35,17 @@ type Config struct {
 	Models       map[string]ModelAlias `toml:"models"`
 	Metrics      Metrics               `toml:"metrics"`
 	Architecture Architecture          `toml:"architecture"`
+	Hooks        Hooks                 `toml:"hooks"`
+}
+
+// Hooks configures `pistos hooks run` (git pre-commit / pre-push and the Claude Code Stop hook).
+type Hooks struct {
+	PreCommitProfile string `toml:"pre_commit_profile"`
+	PrePushProfile   string `toml:"pre_push_profile"`
+	ClaudeProfile    string `toml:"claude_profile"`
+	// BlockOnIncomplete makes an incomplete review (missing tool, failed check) block the commit or
+	// push instead of only warning.
+	BlockOnIncomplete bool `toml:"block_on_incomplete"`
 }
 
 // Metrics thresholds apply to the "metrics" check. Findings are advisory unless Gate is set.
@@ -249,6 +260,15 @@ func (c *Config) applyDefaults() {
 	setDefault(&c.Metrics.Nesting, 4)
 	setDefault(&c.Metrics.Params, 5)
 	setDefault(&c.Metrics.Statements, 50)
+	if c.Hooks.PreCommitProfile == "" {
+		c.Hooks.PreCommitProfile = "fast"
+	}
+	if c.Hooks.PrePushProfile == "" {
+		c.Hooks.PrePushProfile = "balanced"
+	}
+	if c.Hooks.ClaudeProfile == "" {
+		c.Hooks.ClaudeProfile = "fast"
+	}
 	if c.Architecture.Cycles == nil {
 		t := true
 		c.Architecture.Cycles = &t
@@ -283,6 +303,13 @@ func (c *Config) Validate() error {
 	}
 	if c.Execution.Jobs < 1 || c.Execution.Jobs > 256 {
 		add("execution.jobs must be between 1 and 256")
+	}
+	for _, h := range []struct{ key, v string }{
+		{"pre_commit_profile", c.Hooks.PreCommitProfile}, {"pre_push_profile", c.Hooks.PrePushProfile}, {"claude_profile", c.Hooks.ClaudeProfile},
+	} {
+		if !contains(Profiles, h.v) {
+			add("hooks.%s %q must be one of %s", h.key, h.v, strings.Join(Profiles, ", "))
+		}
 	}
 	if !contains(Severities, c.Policy.BlockOn) && c.Policy.BlockOn != "none" {
 		add("policy.block_on %q must be one of error, warning, info, none", c.Policy.BlockOn)

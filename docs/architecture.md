@@ -14,7 +14,7 @@ snapshot (git trees) → projects → check plan → cache lookup → run tools 
 
 | Stage | Package | Notes |
 |---|---|---|
-| CLI | `internal/cli` | Cobra commands; exit codes 0/1/2/130 |
+| CLI | `internal/cli` | Cobra commands; exit codes 0/1/2/130; git and Claude Code hooks |
 | Configuration | `internal/config` | `config.toml` (strict, unknown keys rejected), `lock.json`, init |
 | Project detection | `internal/detect` | Marker files only; never crawls vendor/build/dependency dirs |
 | Snapshots | `internal/snapshot` | Git trees for base and head; working snapshot via a temporary index |
@@ -24,16 +24,18 @@ snapshot (git trees) → projects → check plan → cache lookup → run tools 
 | Feedback | `internal/feedback` | `feedback.yaml` load/validate/mutate/match |
 | Local state | `internal/store` | Content-addressed result cache, issue ledger, current report |
 | Orchestration | `internal/review` | Glues the stages; computes the verdict |
-| Output | `internal/report` | Text and JSON renderers |
+| Output | `internal/report` | Text, agent, JSON, SARIF and HTML renderers |
 
 ## Snapshots and isolation
 
 Every review compares two git **trees**. A commit head uses its tree directly. A working-snapshot head is
 built by copying the index to a temporary file, running `git add -A` against that temporary index and
 `git write-tree`: staged, unstaged and untracked (non-ignored) files are captured without touching the
-user's index or working tree (git only gains unreferenced objects, which `git gc` prunes). Each tree is
-materialized with `git archive` into `.pistos/cache/work/<tree>/`, so analyzers never see edits made
-while they run, and baseline and head outputs never share a directory.
+user's index or working tree (git only gains unreferenced objects, which `git gc` prunes). A staged
+head (`--staged`) is `git write-tree` over a copy of the index — the one git passes to hooks in
+`GIT_INDEX_FILE`, else the repository's. Every other git command runs with `GIT_INDEX_FILE` removed.
+Each tree is materialized with `git archive` into `.pistos/cache/work/<tree>/`, so analyzers never see
+edits made while they run, and baseline and head outputs never share a directory.
 
 ## Identity
 

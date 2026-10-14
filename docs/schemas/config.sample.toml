@@ -35,6 +35,12 @@ paths = ["svc/internal/infra/**"]
 from = "domain"
 deny = ["infra"]
 
+[hooks]
+pre_commit_profile = "fast"
+pre_push_profile = "balanced"
+claude_profile = "fast"
+block_on_incomplete = false
+
 [ai]
 enabled = false
 required = false
