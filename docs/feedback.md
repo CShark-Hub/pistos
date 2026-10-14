@@ -35,6 +35,20 @@ The default scope is *this issue*. Wider *rule/pattern* scope needs an explicit 
 `pistos feedback` (preview + confirmation) or `pistos tag N TAG --scope pattern --paths GLOB --yes`
 after the printed preview.
 
+## From the browser
+
+`pistos review` writes `.pistos/state/report.html` (self-contained, offline) with a highlighted code
+excerpt for every issue, and prints its `file://` link plus the platform's open command (`open`,
+`xdg-open`, `explorer.exe`, `wslview`; over SSH, a port-forwarding hint). `pistos report` serves the
+current report on a loopback address and opens it: select issues, choose per issue **this exact
+issue** (issue scope) or **this kind of issue** (pattern scope: same family in the same project,
+optionally limited to path globs; the dialog shows how many current issues it covers), pick
+`irrelevant`, `false-positive` or `accepted-risk` and an optional reason, and save. Saving goes
+through the same code as `pistos tag`; selections of the same kind become one pattern decision.
+The server only accepts its own `Host` and a per-run token sent in a custom header, so other sites
+cannot write decisions. The static file cannot write; it shows the equivalent `pistos tag` commands.
+`tag` and `reopen` regenerate an existing `report.html`.
+
 ## Concurrency and edits
 
 Mutations hold `.pistos/feedback.yaml.lock`, re-read the file, change only the affected entries in

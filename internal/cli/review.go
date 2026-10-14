@@ -13,7 +13,7 @@ import (
 func (a *app) reviewCommand() *cobra.Command {
 	var o review.Options
 	var format string
-	var includeIgnored, includeExisting, verbose bool
+	var includeIgnored, includeExisting, verbose, noHTML bool
 	cmd := &cobra.Command{
 		Use:   "review",
 		Short: "Review changes with the fixed deterministic check plan",
@@ -61,6 +61,13 @@ independently of uncommitted changes. --all reviews the whole working snapshot.`
 			if err != nil {
 				return withCode(ExitError, err)
 			}
+			if !noHTML {
+				if p, err := writeHTMLReport(cmd.Context(), repo, env); err != nil {
+					fmt.Fprintln(a.stderr, "note: html report not written:", err)
+				} else {
+					a.announceReport(p)
+				}
+			}
 			if code := env.Canonical.Verdict.ExitCode; code != 0 {
 				return withCode(code, nil)
 			}
@@ -79,6 +86,7 @@ independently of uncommitted changes. --all reviews the whole working snapshot.`
 	f.BoolVar(&includeExisting, "include-existing", false, "also list issues already present in the baseline")
 	f.BoolVar(&o.RefreshAI, "refresh-ai", false, "run fresh AI discovery instead of replaying recorded responses")
 	f.BoolVar(&o.FeedbackFromBase, "feedback-from-base", false, "apply the baseline's committed decisions (for untrusted changes)")
+	f.BoolVar(&noHTML, "no-html", false, "do not write .pistos/state/report.html")
 	f.BoolVarP(&verbose, "verbose", "v", false, "print progress to stderr")
 	return cmd
 }

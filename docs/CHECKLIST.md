@@ -227,3 +227,10 @@ Not done / not verified (also in `docs/release-readiness.md`):
 - CI workflows have never run remotely; macOS and Windows are unverified.
 - Module path is still the placeholder `example.com/pistos`.
 - No hosted model, no mixed-model AI comparison, no large-monorepo benchmark.
+
+## Post-milestone — HTML report and browser triage
+
+- [x] `.pistos/state/report.html` written after every review (`--no-html` opts out): verdict, coverage, issues with highlighted code excerpts (Go, Python, JS/TS, C#), long ranges elided, self-contained and offline
+- [x] Review end prints a clickable link (OSC 8 on terminals, `PISTOS_HYPERLINKS=0/1` override) and the platform open command (macOS, Linux, Windows, WSL; SSH port-forwarding hint)
+- [x] `pistos report`: loopback server with Host check and per-run token; select issues, choose exact issue or kind (pattern) per issue, save to `feedback.yaml` via `pistos tag` semantics; `--static`, `--no-open`, `--addr`
+- [x] Re-tagging the same pattern extends the existing decision instead of failing on a duplicate ID

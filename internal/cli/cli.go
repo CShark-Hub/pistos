@@ -90,7 +90,7 @@ func (a *app) rootCommand() *cobra.Command {
 	}
 	root.PersistentFlags().StringVarP(&a.repo, "repo", "C", "", "repository root (default: enclosing git repository)")
 	root.AddCommand(a.initCommand(), a.doctorCommand(), a.pluginsCommand(), a.reviewCommand(),
-		a.tagCommand(), a.reopenCommand(), a.feedbackCommand(), a.reproduceCommand(), a.factsCommand())
+		a.tagCommand(), a.reopenCommand(), a.feedbackCommand(), a.reproduceCommand(), a.factsCommand(), a.reportCommand())
 	return root
 }
 

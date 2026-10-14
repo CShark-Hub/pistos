@@ -12,13 +12,19 @@ findings are advisory. Human decisions (`pistos tag 47 irrelevant`) persist in a
 ## Quick start
 
 ```sh
-go build -o pistos ./cmd/pistos
+go install ./cmd/pistos       # installs to $(go env GOPATH)/bin; make sure that directory is on PATH
 pistos init                  # detect projects, write .pistos/config.toml (never installs anything)
 pistos plugins install       # explicit tool acquisition; records versions/checksums in .pistos/lock.json
 pistos review                # working tree (staged, unstaged, untracked) against HEAD
 pistos review --base main    # against merge-base(main, HEAD)
 pistos tag 3 irrelevant      # persist a decision; the issue stays suppressed in future reviews
+pistos report                # browse the report with code excerpts; select issues to ignore and save
 ```
+
+Every review also writes `.pistos/state/report.html` and prints its link with the command that opens
+it on this machine (`--no-html` skips it).
+
+Alternatively, `go build -o pistos ./cmd/pistos` builds into the current directory; then invoke it as `./pistos`.
 
 Exit codes: `0` clean gate, `1` blocking findings, `2` configuration/execution error or incomplete
 required checks, `130` cancelled.

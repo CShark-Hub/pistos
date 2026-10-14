@@ -58,6 +58,7 @@ and requires --yes after reviewing the printed preview.`,
 			}
 			fmt.Fprintf(a.stdout, "%s %s → [%s] (%s, version %d)\n", args[0], d.ID, strings.Join(d.Tags, ", "), d.Describe(), d.Version)
 			a.printRefiltered(env)
+			a.refreshHTMLReport(cmd.Context(), repo, env)
 			return nil
 		},
 	}
@@ -84,6 +85,7 @@ func (a *app) reopenCommand() *cobra.Command {
 			}
 			fmt.Fprintf(a.stdout, "%s reopened\n", args[0])
 			a.printRefiltered(env)
+			a.refreshHTMLReport(cmd.Context(), repo, env)
 			return nil
 		},
 	}

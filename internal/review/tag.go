@@ -114,7 +114,7 @@ func Tag(ctx context.Context, repo, ref string, o TagOptions) (*feedback.Decisio
 
 	var result feedback.Decision
 	_, err = feedback.Update(ctx, repo, func(f *feedback.File) error {
-		d := existingDecision(f, r.Issue, o.Pattern)
+		d := existingDecision(f, r.Issue, o)
 		if d == nil {
 			nd := newDecision(ctx, g, r, o)
 			f.Decisions = append(f.Decisions, nd)
@@ -146,12 +146,15 @@ func Tag(ctx context.Context, repo, ref string, o TagOptions) (*feedback.Decisio
 	return &result, refreshed, err
 }
 
-func existingDecision(f *feedback.File, is finding.Issue, pattern bool) *feedback.Decision {
+// existingDecision finds the decision a new tag extends. A pattern is identified by its project, family
+// and paths, so tagging it again adds tags instead of appending a duplicate ID.
+func existingDecision(f *feedback.File, is finding.Issue, o TagOptions) *feedback.Decision {
+	if o.Pattern {
+		_, d := f.Find(patternID(feedback.Pattern{Project: is.Project, Family: is.Family, Paths: o.PatternPaths}))
+		return d
+	}
 	for i := range f.Decisions {
 		d := &f.Decisions[i]
-		if pattern {
-			continue
-		}
 		if d.Scope == feedback.ScopeIssue && (d.Subject == is.Key || d.ID == is.Disposition.Decision) {
 			return d
 		}
@@ -163,9 +166,7 @@ func newDecision(ctx context.Context, g snapshot.Git, r *Ref, o TagOptions) feed
 	is := r.Issue
 	if o.Pattern {
 		p := &feedback.Pattern{Project: is.Project, Family: is.Family, Paths: o.PatternPaths}
-		return feedback.Decision{
-			ID: feedback.NewID("pattern\x00" + p.Project + "\x00" + p.Family + "\x00" + strings.Join(p.Paths, "\x00")), Scope: feedback.ScopePattern, Pattern: p, Version: 1,
-		}
+		return feedback.Decision{ID: patternID(*p), Scope: feedback.ScopePattern, Pattern: p, Version: 1}
 	}
 	var aliases []string
 	for _, s := range is.Sources {
@@ -183,6 +184,10 @@ func newDecision(ctx context.Context, g snapshot.Git, r *Ref, o TagOptions) feed
 		},
 		Origin: &feedback.Origin{Tree: r.Tree, Commit: r.Commit},
 	}
+}
+
+func patternID(p feedback.Pattern) string {
+	return feedback.NewID("pattern\x00" + p.Project + "\x00" + p.Family + "\x00" + strings.Join(p.Paths, "\x00"))
 }
 
 // Reopen removes the suppressing and deferral tags of the decision applied to an issue.

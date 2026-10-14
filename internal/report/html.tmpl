@@ -1,0 +1,354 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pistos review</title>
+<style>
+:root {
+  --bg: #f7f7f8; --panel: #ffffff; --text: #1d1f23; --muted: #646b76; --border: #dfe2e7;
+  --accent: #3559d4; --error: #c62a2a; --warning: #a86200; --info: #2c6db3; --ok: #227a43;
+  --code-bg: #fbfbfc; --hit: #fff4c2; --hit-edge: #e2a400; --gutter: #9aa1ab;
+  --tk-keyword: #a626a4; --tk-string: #3f7e1f; --tk-comment: #8a919b; --tk-number: #b35a00;
+  --tk-literal: #0f7a8a; --tk-func: #3559d4; --tk-type: #8b5a00;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #15171b; --panel: #1d2026; --text: #e3e6eb; --muted: #9aa2ae; --border: #30343c;
+    --accent: #7c9cff; --error: #ff6b6b; --warning: #f0b14a; --info: #6cb0ff; --ok: #5fd08a;
+    --code-bg: #181a1f; --hit: #3a3317; --hit-edge: #d6a21f; --gutter: #626a76;
+    --tk-keyword: #d68cf5; --tk-string: #9fd48a; --tk-comment: #7a828e; --tk-number: #f2a65a;
+    --tk-literal: #5fcfd9; --tk-func: #8fb0ff; --tk-type: #e7c27a;
+  }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+main { max-width: 1100px; margin: 0 auto; padding: 24px 16px 120px; }
+h1 { font-size: 20px; margin: 0; }
+h2 { font-size: 15px; margin: 28px 0 10px; }
+code, pre, .mono { font-family: ui-monospace, "SF Mono", "Cascadia Code", Menlo, Consolas, monospace; font-size: 12.5px; }
+.muted { color: var(--muted); }
+header { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 16px; }
+.verdict { padding: 3px 10px; border-radius: 999px; font-weight: 600; font-size: 12px; letter-spacing: .04em; }
+.verdict.pass { background: color-mix(in srgb, var(--ok) 18%, transparent); color: var(--ok); }
+.verdict.fail, .verdict.error, .verdict.incomplete { background: color-mix(in srgb, var(--error) 18%, transparent); color: var(--error); }
+.meta { display: grid; grid-template-columns: max-content 1fr; gap: 2px 14px; margin-top: 14px; }
+.meta dt { color: var(--muted); }
+.meta dd { margin: 0; overflow-wrap: anywhere; }
+.counts { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+.count { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 6px 12px; }
+.count b { font-size: 16px; margin-right: 4px; }
+details.coverage { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; margin-top: 16px; }
+details.coverage summary { cursor: pointer; }
+table { border-collapse: collapse; width: 100%; margin-top: 8px; }
+td, th { text-align: left; padding: 4px 8px; border-top: 1px solid var(--border); vertical-align: top; }
+th { color: var(--muted); font-weight: 500; }
+.toolbar { position: sticky; top: 0; z-index: 2; display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; padding: 10px 0; background: var(--bg); border-bottom: 1px solid var(--border); }
+.toolbar input[type=search] { flex: 1 1 220px; padding: 6px 10px; border: 1px solid var(--border); border-radius: 6px; background: var(--panel); color: var(--text); }
+.issue { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; margin: 12px 0; overflow: hidden; }
+.issue.selected { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.issue[hidden] { display: none; }
+.issue-head { display: grid; grid-template-columns: auto 1fr; gap: 10px; padding: 12px 14px 8px; }
+.issue-head input { margin-top: 4px; width: 16px; height: 16px; accent-color: var(--accent); }
+.title { font-weight: 600; overflow-wrap: anywhere; }
+.sub { display: flex; flex-wrap: wrap; gap: 4px 10px; color: var(--muted); font-size: 12.5px; margin-top: 2px; }
+.pill { display: inline-block; padding: 0 7px; border-radius: 999px; font-size: 11.5px; font-weight: 600; border: 1px solid currentColor; }
+.sev-error { color: var(--error); } .sev-warning { color: var(--warning); } .sev-info { color: var(--info); }
+.state { color: var(--muted); }
+.extra { padding: 0 14px 8px 40px; font-size: 13px; }
+.extra summary { cursor: pointer; color: var(--muted); }
+.extra p { margin: 4px 0; }
+.code { margin: 0; background: var(--code-bg); border-top: 1px solid var(--border); overflow-x: auto; padding: 6px 0; }
+.code .ln { display: flex; white-space: pre; tab-size: 4; min-height: 1.5em; }
+.code .n { flex: 0 0 auto; width: 5ch; padding-right: 12px; text-align: right; color: var(--gutter); user-select: none; border-left: 3px solid transparent; }
+.code .c { padding-right: 16px; }
+.code .hit { background: var(--hit); }
+.code .hit .n { border-left-color: var(--hit-edge); color: var(--text); }
+.code .gap { color: var(--muted); font-style: italic; padding-left: 7ch; }
+.nocode { padding: 8px 14px 12px 40px; color: var(--muted); font-size: 12.5px; border-top: 1px solid var(--border); }
+.tk-keyword { color: var(--tk-keyword); } .tk-string { color: var(--tk-string); } .tk-comment { color: var(--tk-comment); font-style: italic; }
+.tk-number { color: var(--tk-number); } .tk-literal { color: var(--tk-literal); } .tk-func { color: var(--tk-func); } .tk-type { color: var(--tk-type); }
+.bar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 3; background: var(--panel); border-top: 1px solid var(--border); box-shadow: 0 -4px 16px rgb(0 0 0 / .08); }
+.bar-inner { max-width: 1100px; margin: 0 auto; padding: 10px 16px; display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.bar[hidden] { display: none; }
+button { font: inherit; padding: 6px 14px; border-radius: 6px; border: 1px solid var(--border); background: var(--panel); color: var(--text); cursor: pointer; }
+button.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+button:disabled { opacity: .5; cursor: default; }
+dialog { width: min(820px, calc(100vw - 32px)); max-height: calc(100vh - 48px); border: 1px solid var(--border); border-radius: 12px; background: var(--panel); color: var(--text); padding: 0; }
+dialog::backdrop { background: rgb(0 0 0 / .4); }
+.dlg-head, .dlg-foot { padding: 14px 18px; border-bottom: 1px solid var(--border); }
+.dlg-foot { border-bottom: 0; border-top: 1px solid var(--border); display: flex; gap: 10px; justify-content: flex-end; flex-wrap: wrap; }
+.dlg-body { padding: 8px 18px; overflow-y: auto; max-height: calc(100vh - 260px); }
+.choice { border-bottom: 1px solid var(--border); padding: 10px 0; }
+.choice:last-child { border-bottom: 0; }
+.choice label { display: block; margin: 3px 0; cursor: pointer; }
+.choice input[type=text] { width: 100%; margin-top: 4px; padding: 5px 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg); color: var(--text); }
+.field { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-top: 10px; }
+.field select, .field input { padding: 5px 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg); color: var(--text); font: inherit; }
+.field input { flex: 1 1 260px; }
+.cmds { white-space: pre-wrap; overflow-wrap: anywhere; background: var(--code-bg); border: 1px solid var(--border); border-radius: 6px; padding: 10px; margin: 10px 0; }
+.status { margin: 10px 0; }
+.status.err { color: var(--error); } .status.ok { color: var(--ok); }
+.empty { background: var(--panel); border: 1px dashed var(--border); border-radius: 10px; padding: 24px; text-align: center; color: var(--muted); }
+</style>
+</head>
+<body>
+<main>
+{{- $r := .Report}}
+<header>
+  <h1>Pistos review</h1>
+  <span class="verdict {{$r.Verdict.Outcome}}">{{upper $r.Verdict.Outcome}}</span>
+  <span class="muted">{{$r.Verdict.Reason}}</span>
+</header>
+<dl class="meta">
+  <dt>Scope</dt><dd>{{if eq $r.Scope.Mode "all"}}full review of {{$r.Scope.HeadRef}}{{else}}{{$r.Scope.HeadRef}} vs {{$r.Scope.BaseRef}}{{if $r.Scope.BaseCommit}} @ <span class="mono">{{short $r.Scope.BaseCommit}}</span>{{end}} · {{len $r.Scope.ChangedFiles}} changed file(s){{end}}</dd>
+  <dt>Tree</dt><dd class="mono">{{$r.Scope.HeadTree}}</dd>
+  {{- if $r.Scope.Projects}}<dt>Projects</dt><dd>{{join $r.Scope.Projects ", "}}</dd>{{end}}
+  <dt>Started</dt><dd>{{.Env.Telemetry.StartedAt}} · {{.Env.Telemetry.DurationMS}} ms</dd>
+  <dt>AI</dt><dd>{{$r.Coverage.AI}}</dd>
+</dl>
+<div class="counts">
+  <span class="count"><b>{{index .Counts "blocking"}}</b>blocking</span>
+  <span class="count"><b>{{index .Counts "other"}}</b>non-blocking</span>
+  <span class="count"><b>{{index .Counts "suppressed"}}</b>suppressed by feedback</span>
+  <span class="count"><b>{{index .Counts "existing"}}</b>pre-existing</span>
+</div>
+{{- if $r.Coverage.Capabilities}}
+<details class="coverage">
+  <summary>Checks ({{len $r.Coverage.Capabilities}}, profile {{$r.Coverage.Profile}})</summary>
+  <table>
+    <tr><th>Project</th><th>Check</th><th>Side</th><th>Status</th><th>Tool</th></tr>
+    {{- range $r.Coverage.Capabilities}}
+    <tr>
+      <td>{{.Project}}</td><td>{{.Capability}}</td><td>{{.Side}}</td>
+      <td>{{.Status}}{{if .Required}} · required{{end}}{{if .Error}}<div class="sev-error">{{.Error}}</div>{{end}}{{range .Limitations}}<div class="muted">{{.}}</div>{{end}}</td>
+      <td class="mono">{{.Tool}} {{.ToolVersion}}</td>
+    </tr>
+    {{- end}}
+  </table>
+</details>
+{{- end}}
+
+<h2>Issues</h2>
+{{- if .Issues}}
+<div class="toolbar">
+  <input type="search" id="filter" placeholder="Filter by path, message, family or #number" aria-label="Filter issues">
+  <label><input type="checkbox" id="show-suppressed"> suppressed</label>
+  <label><input type="checkbox" id="show-existing"> pre-existing</label>
+  <span class="muted" id="shown"></span>
+</div>
+{{- range .Issues}}
+<article class="issue" id="issue-{{.Number}}" data-key="{{.Key}}" data-suppressed="{{eq .Disposition.State "suppressed"}}" data-existing="{{eq .Change "existing"}}"{{if .Hidden}} hidden{{end}}>
+  <div class="issue-head">
+    <input type="checkbox" class="pick" value="{{.Key}}" aria-label="Select issue #{{.Number}}"{{if eq .Disposition.State "suppressed"}} disabled title="Already suppressed by {{.Disposition.Decision}}"{{end}}>
+    <div>
+      <div class="title"><span class="muted">#{{.Number}}</span> {{.Message}}</div>
+      <div class="sub">
+        <span class="pill sev-{{.Severity}}">{{.Severity}}</span>
+        {{- if .Blocking}}<span class="sev-error">✗ blocking</span>{{else if .Advisory}}<span>advisory</span>{{end}}
+        <span class="mono">{{.Where}}{{if .Anchor.Symbol}} · {{.Anchor.Symbol}}{{end}}</span>
+        <span>{{.Family}}</span>
+        <span class="mono">{{join .Tools " "}}</span>
+        {{- if and .Change (ne .Change "in-scope")}}<span class="state">{{.Change}}</span>{{end}}
+        {{- if ne .Disposition.State "active"}}<span class="state">{{.Disposition.State}}{{if .Disposition.Tags}} [{{join .Disposition.Tags ", "}}]{{end}}</span>{{end}}
+      </div>
+    </div>
+  </div>
+  {{- if or .AI .Disposition.Note (gt (len .Sources) 1)}}
+  <div class="extra">
+    {{- if .Disposition.Note}}<p class="muted">note: {{.Disposition.Note}}</p>{{end}}
+    {{- if .AI}}
+    <details><summary>AI: {{.AI.Outcome}} by {{join .AI.Passes ", "}} ({{join .AI.Models ", "}})</summary>
+      {{- if .AI.Impact}}<p><b>Impact:</b> {{.AI.Impact}}</p>{{end}}
+      {{- if .AI.FailingScenario}}<p><b>Failing scenario:</b> {{.AI.FailingScenario}}</p>{{end}}
+      {{- range .AI.Assumptions}}<p><b>Assumes:</b> {{.}}</p>{{end}}
+      {{- if .AI.TriageReason}}<p><b>Triage:</b> {{.AI.TriageReason}}</p>{{end}}
+      {{- if .AI.Carried}}<p class="muted">{{.AI.Carried}}</p>{{end}}
+    </details>
+    {{- end}}
+    {{- if gt (len .Sources) 1}}
+    <details><summary>{{len .Sources}} sources</summary>
+      {{- range .Sources}}<p><span class="mono">{{.Tool}}:{{.Rule}}</span> [{{.Severity}}] {{.Message}}</p>{{end}}
+    </details>
+    {{- end}}
+  </div>
+  {{- end}}
+  {{- if .Lines}}
+  <pre class="code" aria-label="{{.Location.Path}}">{{range .Lines}}{{if .Gap}}<span class="ln gap">… {{.Gap}} more line(s) …</span>{{else}}<span class="ln{{if .Hit}} hit{{end}}"><span class="n">{{.N}}</span><span class="c">{{.Code}}</span></span>{{end}}{{end}}</pre>
+  {{- else}}
+  <div class="nocode">{{.NoCode}}</div>
+  {{- end}}
+</article>
+{{- end}}
+{{- else}}
+<div class="empty">No issues reported.</div>
+{{- end}}
+<p class="muted">Generated by pistos {{.Version}}. Decisions are stored in <span class="mono">.pistos/feedback.yaml</span>.</p>
+</main>
+
+<div class="bar" id="bar" hidden>
+  <div class="bar-inner">
+    <b id="sel-count"></b>
+    <span class="muted">Mark the selected issues so future reviews stop reporting them.</span>
+    <span style="flex:1"></span>
+    <button type="button" id="clear">Clear</button>
+    <button type="button" class="primary" id="open-save">Ignore selected…</button>
+  </div>
+</div>
+
+<dialog id="dlg">
+  <form method="dialog" id="dlg-form">
+    <div class="dlg-head">
+      <b>Ignore in future reviews</b>
+      <div class="muted">For each issue, choose whether only this exact occurrence is ignored, or every finding of the same kind.</div>
+    </div>
+    <div class="dlg-body">
+      <div id="choices"></div>
+      <div class="field">
+        <label for="tag">Mark as</label>
+        <select id="tag">{{range .Tags}}<option>{{.}}</option>{{end}}</select>
+        <input type="text" id="reason" placeholder="Reason (optional, stored with the decision)">
+      </div>
+      <div id="result"></div>
+    </div>
+    <div class="dlg-foot">
+      <button type="button" id="cancel">Cancel</button>
+      <button type="button" class="primary" id="save">Save decisions</button>
+    </div>
+  </form>
+</dialog>
+
+<script type="application/json" id="pistos-data">{"token": {{.Token}}, "issues": {{.Selectable}}}</script>
+<script>
+(function () {
+  "use strict";
+  const data = JSON.parse(document.getElementById("pistos-data").textContent);
+  const byKey = new Map(data.issues.map(i => [i.key, i]));
+  const selected = new Set();
+  const $ = id => document.getElementById(id);
+  const cards = Array.from(document.querySelectorAll("article.issue"));
+
+  function applyFilter() {
+    const q = ($("filter")?.value || "").trim().toLowerCase();
+    const showSup = $("show-suppressed")?.checked, showEx = $("show-existing")?.checked;
+    let shown = 0;
+    for (const c of cards) {
+      const hide = (c.dataset.suppressed === "true" && !showSup) || (c.dataset.existing === "true" && !showEx && c.dataset.suppressed !== "true") ||
+        (q && !c.textContent.toLowerCase().includes(q));
+      c.hidden = hide && !selected.has(c.dataset.key);
+      if (!c.hidden) shown++;
+    }
+    if ($("shown")) $("shown").textContent = shown + " of " + cards.length + " shown";
+  }
+  ["filter", "show-suppressed", "show-existing"].forEach(id => $(id)?.addEventListener("input", applyFilter));
+  applyFilter();
+
+  function refreshBar() {
+    $("bar").hidden = selected.size === 0;
+    $("sel-count").textContent = selected.size + " selected";
+    for (const c of cards) c.classList.toggle("selected", selected.has(c.dataset.key));
+  }
+  document.querySelectorAll("input.pick").forEach(cb => cb.addEventListener("change", () => {
+    cb.checked ? selected.add(cb.value) : selected.delete(cb.value);
+    refreshBar();
+  }));
+  $("clear").addEventListener("click", () => {
+    selected.clear();
+    document.querySelectorAll("input.pick").forEach(cb => cb.checked = false);
+    refreshBar(); applyFilter();
+  });
+
+  function el(tag, attrs, ...kids) {
+    const e = document.createElement(tag);
+    for (const [k, v] of Object.entries(attrs || {})) {
+      if (k === "text") e.textContent = v; else if (v === true) e.setAttribute(k, ""); else if (v !== false && v != null) e.setAttribute(k, v);
+    }
+    kids.forEach(k => e.append(k));
+    return e;
+  }
+
+  $("open-save").addEventListener("click", () => {
+    const box = $("choices");
+    box.replaceChildren();
+    $("result").replaceChildren();
+    $("save").disabled = false;
+    for (const key of selected) {
+      const i = byKey.get(key);
+      const name = "scope-" + i.number;
+      const paths = el("input", { type: "text", placeholder: "Limit to paths (comma-separated globs, e.g. gen/**); empty = whole project " + i.project, "data-paths": key, disabled: true });
+      const exact = el("input", { type: "radio", name, value: "issue", checked: true });
+      const kind = el("input", { type: "radio", name, value: "pattern" });
+      [exact, kind].forEach(r => r.addEventListener("change", () => { paths.disabled = !kind.checked; }));
+      box.append(el("div", { class: "choice", "data-key": key },
+        el("div", {}, el("b", { text: "#" + i.number + " " }), el("span", { class: "mono", text: i.path }), el("span", { class: "muted", text: " · " + i.family })),
+        el("label", {}, exact, " This exact issue only (follows line shifts and verified renames)"),
+        el("label", {}, kind, " This kind of issue: every ", el("span", { class: "mono", text: i.family }), " finding in project " + i.project +
+          " (" + i.kind_hits + " in this report)"),
+        paths));
+    }
+    $("dlg").showModal();
+  });
+  $("cancel").addEventListener("click", () => $("dlg").close());
+
+  function collect() {
+    const tag = $("tag").value, reason = $("reason").value.trim();
+    return Array.from(document.querySelectorAll("#choices .choice")).map(c => {
+      const scope = c.querySelector("input[type=radio]:checked").value;
+      const raw = c.querySelector("input[type=text]").value;
+      const paths = scope === "pattern" ? raw.split(",").map(s => s.trim()).filter(Boolean) : [];
+      return { key: c.dataset.key, scope, tags: [tag], reason, paths };
+    });
+  }
+
+  const q = s => /^[A-Za-z0-9_\-.\/,:=@]+$/.test(s) ? s : "'" + s.replace(/'/g, "'\\''") + "'";
+  function commands(ds) {
+    return ds.map(d => {
+      let c = "pistos tag " + d.key + " " + d.tags.join(" ");
+      if (d.scope === "pattern") {
+        c += " --scope pattern";
+        if (d.paths.length) c += " --paths " + q(d.paths.join(","));
+        c += " --yes";
+      }
+      if (d.reason) c += " --reason " + q(d.reason);
+      return c;
+    }).join("\n");
+  }
+
+  function showStatus(cls, text, extra) {
+    $("result").replaceChildren(el("div", { class: "status " + cls, text }), ...(extra || []));
+  }
+
+  $("save").addEventListener("click", async () => {
+    const ds = collect();
+    if (!data.token) {
+      const pre = el("pre", { class: "cmds mono", text: commands(ds) });
+      const copy = el("button", { type: "button", text: "Copy commands" });
+      copy.addEventListener("click", () => navigator.clipboard?.writeText(pre.textContent).then(() => { copy.textContent = "Copied"; }));
+      showStatus("", "This is a static copy of the report, so it cannot write to the repository. Run these commands, or open the report with `pistos report` to save from the browser:", [pre, copy]);
+      return;
+    }
+    $("save").disabled = true;
+    showStatus("", "Saving…");
+    try {
+      const res = await fetch("api/decisions", {
+        method: "POST", headers: { "Content-Type": "application/json", "X-Pistos-Token": data.token },
+        body: JSON.stringify({ decisions: ds }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok || (body.errors && body.errors.length)) {
+        $("save").disabled = false;
+        const errs = (body.errors || [body.error || ("HTTP " + res.status)]).map(e => el("div", { class: "status err", text: e }));
+        showStatus("err", "Some decisions were not saved:", errs);
+        return;
+      }
+      showStatus("ok", "Saved " + body.applied.length + " decision(s) to .pistos/feedback.yaml. Reloading…");
+      setTimeout(() => location.reload(), 700);
+    } catch (e) {
+      $("save").disabled = false;
+      showStatus("err", "The pistos report server is not reachable (" + e.message + "). Run these commands instead:", [el("pre", { class: "cmds mono", text: commands(ds) })]);
+    }
+  });
+})();
+</script>
+</body>
+</html>
