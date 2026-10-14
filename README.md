@@ -107,3 +107,5 @@ Mateusz Margos 👋
 ## License
 
 Apache-2.0. Third-party analyzers keep their own licenses; see [docs/third-party.md](docs/third-party.md).
+
+Copyright (c) 2026 CSHARK Commit Hackathon Contributors (Mateusz Margos)
