@@ -128,12 +128,17 @@ func enclosingRepo(abs string) string {
 
 func (a *app) initCommand() *cobra.Command {
 	var langs []string
+	var noSecrets bool
 	cmd := &cobra.Command{
 		Use:   "init",
 		Short: "Detect projects and write .pistos/ configuration (idempotent; never installs tools)",
+		Long: "Detect projects and write .pistos/ configuration (idempotent; never installs tools).\n\n" +
+			"A repository-wide secret scan (the secrets pack, gitleaks) is added as project \"secrets\" whatever\n" +
+			"--lang selects; pass --no-secrets to leave it out, or --lang secrets alone to configure only it.",
 		Example: `  pistos init
   pistos init --lang csharp
   pistos init --lang go --lang python
+  pistos init --lang go --no-secrets
   pistos init --lang "c#"   # quote c# so the shell does not treat # as a comment`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
@@ -143,19 +148,29 @@ func (a *app) initCommand() *cobra.Command {
 			}
 			a.printBanner(a.stdout)
 			var selected []string
+			onlySecrets := len(langs) > 0
 			for _, l := range langs {
 				eco, err := config.NormalizeLanguage(l)
 				if err != nil {
 					return withCode(ExitError, err)
 				}
+				if eco == config.Secrets {
+					if noSecrets {
+						return withCode(ExitError, errors.New("--lang secrets contradicts --no-secrets"))
+					}
+					continue
+				}
+				onlySecrets = false
 				selected = append(selected, eco)
 			}
-			projects, err := detect.Projects(repo, selected)
-			if err != nil {
-				return err
+			var projects []config.Project
+			if !onlySecrets {
+				if projects, err = detect.Projects(repo, selected); err != nil {
+					return err
+				}
 			}
 			active := selected
-			if len(active) == 0 {
+			if len(langs) == 0 {
 				seen := map[string]bool{}
 				for _, p := range projects {
 					if !seen[p.Ecosystem] {
@@ -163,6 +178,10 @@ func (a *app) initCommand() *cobra.Command {
 						active = append(active, p.Ecosystem)
 					}
 				}
+			}
+			if !noSecrets {
+				projects = append(projects, config.SecretsProject())
+				active = append(active, config.Secrets)
 			}
 			res, err := config.Init(repo, dedupe(active), projects)
 			if err != nil {
@@ -183,13 +202,18 @@ func (a *app) initCommand() *cobra.Command {
 				}
 			}
 			for _, p := range res.Suggested {
+				if p.Ecosystem == config.Secrets {
+					fmt.Fprintln(a.stdout, "secret scanning (project \"secrets\", root \".\") is not in config.toml; add it manually if wanted (docs/packs/secrets.md)")
+					continue
+				}
 				fmt.Fprintf(a.stdout, "detected %s (%s at %s) is not in config.toml; add it manually if wanted\n", p.ID, p.Ecosystem, p.Root)
 			}
 			fmt.Fprintln(a.stdout, "next: pistos plugins install   # explicit tool acquisition and lock")
 			return nil
 		},
 	}
-	cmd.Flags().StringArrayVar(&langs, "lang", nil, "ecosystem to enable (go, python, js, ts, csharp, \"c#\"); repeatable")
+	cmd.Flags().StringArrayVar(&langs, "lang", nil, "ecosystem to enable (go, python, js, ts, csharp, \"c#\", secrets); repeatable")
+	cmd.Flags().BoolVar(&noSecrets, "no-secrets", false, "do not add the repository-wide secret scan (secrets pack)")
 	return cmd
 }
 

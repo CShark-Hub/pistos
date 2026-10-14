@@ -36,6 +36,16 @@ For pull requests from untrusted contributors.
   of scope. Pin images (done by digest) and keep Docker updated. For hostile code, run on a disposable
   VM or CI runner.
 
+## Secrets in the code under review
+
+The secrets pack (docs/packs/secrets.md) runs gitleaks with `--redact`, and pistos discards the matched
+text at parse time, so detected secrets never reach the result cache, `.pistos/state`, JSON, SARIF or
+text output. Its findings are marked `sensitive`: the HTML report shows `[line withheld: possible
+secret]` instead of each flagged line (also as context of other issues), and AI evidence replaces it
+with `[line withheld by pistos: possible secret (<family>)]` before any model call. Only lines
+gitleaks flags are withheld; anything it misses (or that `.gitleaksignore` excludes) is treated as
+ordinary code. Renderers that print source must use `finding.SensitiveLines`.
+
 ## AI with untrusted code
 
 The provider client runs in the pistos core on the host, never inside the analysis container. It

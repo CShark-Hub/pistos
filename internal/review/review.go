@@ -639,7 +639,7 @@ func (e *engine) normalize(ctx context.Context, t task, m *plugin.Manifest, work
 		}
 		f := finding.Finding{
 			Lane: finding.LaneDeterministic, Project: t.project.ID, Family: m.Family(t.Capability, d.Rule),
-			Severity: sev, Message: d.Message, Capability: t.Capability,
+			Severity: sev, Message: d.Message, Capability: t.Capability, Sensitive: m.Checks[t.Capability].Sensitive,
 			Location:  finding.Location{Path: rel, Line: d.Line, Column: d.Column, EndLine: d.EndLine, EndColumn: d.EndColumn},
 			Anchor:    finding.Anchor{Symbol: src.enclosing(d.Line), TextHash: finding.AnchorHash(src.line(d.Line))},
 			Sources:   []finding.Source{{Tool: t.Capability, Rule: d.Rule, Severity: sev, Message: d.Message}},

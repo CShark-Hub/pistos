@@ -95,6 +95,11 @@ func rel(repo, p string) string {
 	return filepath.ToSlash(r)
 }
 
+// SecretsProject is the repository-wide secret scan that `pistos init` adds unless asked not to.
+func SecretsProject() Project {
+	return Project{ID: "secrets", Root: ".", Ecosystem: Secrets, Checks: []string{"gitleaks"}}
+}
+
 func RenderConfig(langs []string, projects []Project) string {
 	var b strings.Builder
 	b.WriteString("# Pistos configuration. See docs/configuration.md.\n")

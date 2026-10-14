@@ -29,6 +29,7 @@ Pistos does not redistribute analyzers. Packs locate tools that the repository a
 | ESLint | jsts | MIT | repository `node_modules` only |
 | Oxlint 1.87.0 | jsts | MIT | repository `node_modules`, or managed `npm install --ignore-scripts` |
 | .NET SDK (Roslyn, analyzers) | csharp | MIT | user-installed SDK; the C# facts worker is compiled against its bundled Roslyn |
+| gitleaks 8.30.1 | secrets | MIT | `go install` by `pistos plugins install` |
 | gopls 0.23.0 | go | BSD-3-Clause | `go install` by `plugins install --lsp` |
 | pyright-langserver 1.1.414 | python | MIT | repository or managed npm |
 | csharp-ls 0.28.0 | csharp | MIT | `dotnet tool install` by `plugins install --lsp` |

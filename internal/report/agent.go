@@ -79,7 +79,7 @@ func Agent(w io.Writer, env *finding.Envelope, o AgentOptions) {
 	if len(shown) > o.MaxIssues {
 		shown = shown[:o.MaxIssues]
 	}
-	src := sourceLines(o.Source)
+	src := sourceLines(o.Source, finding.SensitiveLines(r.Issues))
 	section := ""
 	for _, is := range shown {
 		if is.Blocking && section != "blocking" {
@@ -211,7 +211,8 @@ func agentIncomplete(w io.Writer, r *finding.Report) {
 	}
 }
 
-func sourceLines(read func(string) ([]byte, error)) func(string) []string {
+// sourceLines reads files lazily; lines flagged by sensitive findings are withheld.
+func sourceLines(read func(string) ([]byte, error), sensitive map[string]map[int]string) func(string) []string {
 	files := map[string][]string{}
 	return func(p string) []string {
 		if l, ok := files[p]; ok || read == nil {
@@ -220,6 +221,7 @@ func sourceLines(read func(string) ([]byte, error)) func(string) []string {
 		var l []string
 		if b, err := read(p); err == nil {
 			l = strings.Split(strings.ReplaceAll(string(b), "\r\n", "\n"), "\n")
+			l = finding.WithholdLines(l, sensitive[p], func(string) string { return finding.WithheldLine })
 		}
 		files[p] = l
 		return l

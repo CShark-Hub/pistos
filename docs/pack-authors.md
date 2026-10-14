@@ -41,6 +41,11 @@ Rules (enforced by `ParseManifest`; unknown fields are rejected):
   by `builtin-go`.
 - `unsupported` declares a selectable backend that is not integrated, so selecting it is reported
   instead of silently substituted.
+- `"sensitive": true` on a check marks its findings as possible secrets: renderers and AI evidence
+  withhold the flagged lines (`finding.SensitiveLines` / `finding.WithholdLines`). Its parser must drop
+  every field that can carry secret text.
+- `version_from: "go-buildinfo"` reads the version embedded in a Go binary by `go install pkg@version`,
+  for tools whose version flag only works in release builds.
 
 ## Workers
 

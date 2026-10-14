@@ -68,3 +68,26 @@ func TestHTMLRendersExcerptsAndDegrades(t *testing.T) {
 		t.Fatalf("a long range keeps head and tail only: %d marked lines", n)
 	}
 }
+
+func TestHTMLWithholdsSensitiveLines(t *testing.T) {
+	secret := "tok_" + "PistosFakeHTMLSecret0123456789"
+	src := "package main\n\nfunc f() {\n\t_ = 1 // unrelated issue nearby\n}\n\nconst token = \"" + secret + "\"\n"
+	env := &finding.Envelope{
+		Canonical: &finding.Report{Issues: []finding.Issue{
+			{Finding: finding.Finding{Key: "k1-s", Project: "secrets", Family: "gitleaks/github-pat", Severity: finding.SevError, Message: "token", Sensitive: true, Location: finding.Location{Path: "a.go", Line: 7}}},
+			{Finding: finding.Finding{Key: "k1-v", Project: "go", Family: "go-vet/x", Severity: finding.SevWarning, Message: "nearby", Location: finding.Location{Path: "a.go", Line: 4}}},
+		}},
+		Numbers: map[string]int{"k1-s": 1, "k1-v": 2},
+	}
+	var buf bytes.Buffer
+	if err := HTML(&buf, env, HTMLOptions{Source: func(string) ([]byte, error) { return []byte(src), nil }}); err != nil {
+		t.Fatal(err)
+	}
+	out := buf.String()
+	if strings.Contains(out, "PistosFakeHTMLSecret") {
+		t.Fatal("a sensitive line must be withheld, also in the context of other issues")
+	}
+	if strings.Count(out, "line withheld: possible secret") != 2 || !strings.Contains(out, "unrelated issue nearby") {
+		t.Fatal("the flagged line is replaced in both excerpts and the rest stays visible")
+	}
+}

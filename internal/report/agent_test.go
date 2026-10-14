@@ -125,3 +125,22 @@ func TestAgentGolden(t *testing.T) {
 		})
 	}
 }
+
+func TestAgentWithholdsSensitiveLines(t *testing.T) {
+	secret := vetIssue("k2", "internal/x/y.go", 43, true)
+	secret.Family, secret.Message, secret.Sensitive = "gitleaks/generic-api-key", "Detected a Generic API Key", true
+	// The secret line is only context of the vet issue's excerpt and also its own anchor.
+	env := baseReport("blocking", "2 blocking issues", vetIssue("k1", "internal/x/y.go", 42, true), secret)
+	var b bytes.Buffer
+	Agent(&b, env, AgentOptions{Source: agentSource})
+	out := b.String()
+	if strings.Contains(out, "line43()") {
+		t.Fatalf("sensitive line printed:\n%s", out)
+	}
+	if !strings.Contains(out, finding.WithheldLine) {
+		t.Fatalf("placeholder missing:\n%s", out)
+	}
+	if !strings.Contains(out, `fmt.Printf("%d", s)`) {
+		t.Fatalf("unflagged line withheld:\n%s", out)
+	}
+}

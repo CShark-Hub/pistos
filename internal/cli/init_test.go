@@ -32,7 +32,8 @@ func TestInitDetectsAndIsIdempotent(t *testing.T) {
 		t.Fatalf("init failed: %s %s", out, errs)
 	}
 	cfg := r.Read(".pistos/config.toml")
-	for _, want := range []string{`languages = ["go", "python"]`, `id = "go-svc"`, `id = "python-tools"`, `checks = ["ruff", "pyright", "metrics"]`} {
+	for _, want := range []string{`languages = ["go", "python", "secrets"]`, `id = "go-svc"`, `id = "python-tools"`, `checks = ["ruff", "pyright", "metrics"]`,
+		"id = \"secrets\"\nroot = \".\"\necosystem = \"secrets\"\nchecks = [\"" + "git" + "leaks\"]"} {
 		if !strings.Contains(cfg, want) {
 			t.Errorf("config missing %q:\n%s", want, cfg)
 		}
@@ -58,7 +59,7 @@ func TestInitLangSelection(t *testing.T) {
 		t.Fatalf("%s %s", out, errs)
 	}
 	cfg := r.Read(".pistos/config.toml")
-	if !strings.Contains(cfg, `languages = ["csharp", "go"]`) || strings.Contains(cfg, "python") {
+	if !strings.Contains(cfg, `languages = ["csharp", "go", "secrets"]`) || strings.Contains(cfg, "python") {
 		t.Fatalf("unexpected config:\n%s", cfg)
 	}
 }
@@ -75,5 +76,36 @@ func TestInitRejectsUnknownLanguageAndInvalidConfig(t *testing.T) {
 	}
 	if code, _, errs := run(t, dir, "doctor"); code != ExitError || !strings.Contains(errs, "schema = 9") {
 		t.Fatalf("doctor must reject invalid config: code=%d %s", code, errs)
+	}
+}
+
+func TestInitSecretsPackSelection(t *testing.T) {
+	r := gitrepo.New(t, "mixed")
+	if code, out, errs := run(t, r.Dir, "init", "--lang", "go", "--no-secrets"); code != 0 {
+		t.Fatalf("%s %s", out, errs)
+	}
+	if cfg := r.Read(".pistos/config.toml"); !strings.Contains(cfg, `languages = ["go"]`) || strings.Contains(cfg, "secrets") {
+		t.Fatalf("--no-secrets must leave the secret scan out:\n%s", cfg)
+	}
+	// Re-running init on an existing configuration only suggests the secret scan.
+	if code, out, _ := run(t, r.Dir, "init"); code != 0 || !strings.Contains(out, "secret scanning") || strings.Contains(out, "created") {
+		t.Fatalf("code=%d %s", code, out)
+	}
+
+	r = gitrepo.New(t, "mixed")
+	if code, out, errs := run(t, r.Dir, "init", "--lang", "secrets"); code != 0 {
+		t.Fatalf("%s %s", out, errs)
+	}
+	cfg := r.Read(".pistos/config.toml")
+	if !strings.Contains(cfg, `languages = ["secrets"]`) || strings.Count(cfg, "[[projects]]") != 1 || !strings.Contains(cfg, `id = "secrets"`) {
+		t.Fatalf("--lang secrets alone configures only the secret scan:\n%s", cfg)
+	}
+	// The configuration is valid; doctor lists the pack and checks its tool.
+	if _, out, _ := run(t, r.Dir, "doctor"); !strings.Contains(out, "packs    secrets\n") || !strings.Contains(out, "project  secrets") {
+		t.Fatalf("doctor: %s", out)
+	}
+
+	if code, _, errs := run(t, t.TempDir(), "init", "--lang", "secrets", "--no-secrets"); code != ExitError || !strings.Contains(errs, "contradicts") {
+		t.Fatalf("code=%d %s", code, errs)
 	}
 }

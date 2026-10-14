@@ -41,7 +41,8 @@ func setupPack(t *testing.T, fixture, gitignore string, edit func(r *gitrepo.Rep
 	if edit != nil {
 		edit(r)
 	}
-	if code, out, errs := run(t, r.Dir, "init"); code != 0 {
+	// The secrets pack has its own live tests; language pack tests stay independent of gitleaks.
+	if code, out, errs := run(t, r.Dir, "init", "--no-secrets"); code != 0 {
 		t.Fatalf("init: %s %s", out, errs)
 	}
 	if code, out, errs := run(t, r.Dir, "plugins", "install"); code != 0 {
@@ -195,7 +196,7 @@ func TestJSTSMissingRepositoryCompilerIsExplicit(t *testing.T) {
 	requireRuntimes(t, "node")
 	t.Setenv("PISTOS_CACHE_DIR", t.TempDir())
 	r := gitrepo.New(t, "jsts-app")
-	run(t, r.Dir, "init")
+	run(t, r.Dir, "init", "--no-secrets")
 	code, out, _ := run(t, r.Dir, "plugins", "install")
 	if code != ExitError || !strings.Contains(out, "tsc") || !strings.Contains(out, "not found") {
 		t.Fatalf("missing repository TypeScript must be reported, not replaced: %d\n%s", code, out)
@@ -275,7 +276,7 @@ func TestMixedRepositoryStartsOnlyAffectedPacks(t *testing.T) {
 	requireRuntimes(t, "python3")
 	useGoToolchain(t)
 	r := gitrepo.New(t, "mixed")
-	run(t, r.Dir, "init")
+	run(t, r.Dir, "init", "--no-secrets")
 	if code, out, errs := run(t, r.Dir, "plugins", "install"); code != 0 {
 		skipLive(t, "tool acquisition unavailable: %s %s", out, errs)
 	}

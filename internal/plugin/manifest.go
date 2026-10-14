@@ -41,7 +41,9 @@ type Tool struct {
 	// Runtime names another tool of the pack that must run this one (e.g. node for a JS entry point).
 	Runtime string `json:"runtime,omitempty"`
 	// VersionFrom "pack" takes the pack version (embedded workers); "package-json" reads the npm
-	// package version, for entry points that have no version flag.
+	// package version, for entry points that have no version flag; "go-buildinfo" reads the main
+	// module version embedded in a Go binary (plain `go install` builds lack a stamped version) and
+	// falls back to version_args when the binary carries none.
 	VersionFrom string `json:"version_from,omitempty"`
 	// DotnetRoot marks .NET apphost tools, which locate the runtime through DOTNET_ROOT.
 	DotnetRoot bool     `json:"dotnet_root,omitempty"`
@@ -77,11 +79,14 @@ type Check struct {
 	// Facts marks a facts check ("metrics" or "imports"); core rules turn its facts into findings.
 	Facts       string   `json:"facts,omitempty"`
 	Limitations []string `json:"limitations,omitempty"`
+	// Sensitive marks checks whose findings point at secrets: renderers and AI evidence withhold the
+	// flagged source lines (see finding.SensitiveLines).
+	Sensitive bool `json:"sensitive,omitempty"`
 }
 
 // LoadManifest reads an embedded pack manifest. It never starts a process.
 func LoadManifest(name string) (*Manifest, error) {
-	b, err := fs.ReadFile(packs.FS, path.Join(name, "manifest.json"))
+	b, err := fs.ReadFile(packs.FS, path.Join(packs.Dir(name), "manifest.json"))
 	if err != nil {
 		return nil, fmt.Errorf("no bundled pack %q", name)
 	}

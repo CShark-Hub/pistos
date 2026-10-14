@@ -250,6 +250,10 @@ func owningProject(cfg *config.Config, rel string) (finding.Project, error) {
 	var best *config.Project
 	for i := range cfg.Projects {
 		p := &cfg.Projects[i]
+		// The repository-wide secret scan has no language server and owns no code.
+		if eco, _ := config.NormalizeLanguage(p.Ecosystem); eco == config.Secrets {
+			continue
+		}
 		root, _ := config.CleanRel(p.Root)
 		if (root == "." || rel == root || strings.HasPrefix(rel, root+"/")) && (best == nil || len(root) > len(best.Root)) {
 			best = p

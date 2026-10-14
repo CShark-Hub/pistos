@@ -1,0 +1,80 @@
+{
+  "schema": 1,
+  "name": "secrets",
+  "version": "0.1.0",
+  "languages": [],
+  "test_paths": [],
+  "options": [],
+  "env_passthrough": [],
+  "shared_inputs": [
+    ".gitleaks.toml",
+    ".gitleaksignore"
+  ],
+  "tools": {
+    "go": {
+      "command": "go",
+      "lookup": [
+        "path"
+      ],
+      "version_args": [
+        "env",
+        "GOVERSION"
+      ],
+      "version_regex": "^go([0-9][^\\s]*)"
+    },
+    "gitleaks": {
+      "command": "gitleaks",
+      "lookup": [
+        "managed",
+        "path"
+      ],
+      "version_args": [
+        "version"
+      ],
+      "version_regex": "^v?([0-9][^\\s]*)",
+      "version_from": "go-buildinfo",
+      "acquire": {
+        "method": "go-install",
+        "package": "github.com/zricethezav/gitleaks/v8",
+        "version": "v8.30.1"
+      }
+    }
+  },
+  "checks": {
+    "gitleaks": {
+      "tool": "gitleaks",
+      "args": [
+        "dir",
+        ".",
+        "--report-format=json",
+        "--report-path=-",
+        "--redact",
+        "--no-banner",
+        "--no-color",
+        "--log-level=warn",
+        "--exit-code=3",
+        "--gitleaks-ignore-path=."
+      ],
+      "format": "gitleaks-json",
+      "scope": "file",
+      "weight": 1,
+      "sensitive": true,
+      "exit_codes": {
+        "0": "clean",
+        "3": "findings"
+      },
+      "env": {}
+    }
+  },
+  "aliases": {},
+  "authority": [
+    "gitleaks"
+  ],
+  "container": {
+    "dockerfile": "secretscan/Dockerfile",
+    "files": [],
+    "tools": {
+      "gitleaks": "/usr/local/bin/gitleaks"
+    }
+  }
+}

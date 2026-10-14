@@ -83,6 +83,8 @@ func HTML(w io.Writer, env *finding.Envelope, o HTMLOptions) error {
 		o.Context = 4
 	}
 	r := env.Canonical
+	// Lines flagged as possible secrets are withheld from every excerpt, also as context of other issues.
+	withheld := finding.SensitiveLines(r.Issues)
 	files := map[string][]string{}
 	fileErr := map[string]error{}
 	lines := func(p string) ([]string, error) {
@@ -99,6 +101,7 @@ func HTML(w io.Writer, env *finding.Envelope, o HTMLOptions) error {
 			fileErr[p] = fmt.Errorf("source not available: %v", err)
 		}
 		l := strings.Split(strings.ReplaceAll(string(b), "\r\n", "\n"), "\n")
+		l = finding.WithholdLines(l, withheld[p], func(string) string { return finding.WithheldLine })
 		files[p] = l
 		return l, fileErr[p]
 	}

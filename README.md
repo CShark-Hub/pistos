@@ -47,7 +47,8 @@ Exit codes: `0` clean gate, `1` blocking findings, `2` configuration/execution e
 required checks, `130` cancelled.
 
 Language selection accepts aliases: `go`/`golang`, `py`/`python`, `js`/`ts`/`javascript`/`typescript`,
-`cs`/`csharp`/`"c#"` (quote `c#`, otherwise most shells treat `#` as a comment).
+`cs`/`csharp`/`"c#"` (quote `c#`, otherwise most shells treat `#` as a comment). `pistos init` also adds
+a repository-wide secret scan (the `secrets` pack) unless you pass `--no-secrets`.
 
 To limit a project to part of its root, add globs relative to `root` in its `[[projects]]` entry:
 
@@ -74,6 +75,7 @@ project, so excluded code can still affect type checking of included code.
 | Python | Ruff, Pyright / basedpyright | [docs/packs/python.md](docs/packs/python.md) |
 | JS/TS | tsc (repository version), ESLint, Oxlint | [docs/packs/jsts.md](docs/packs/jsts.md) |
 | C# | `dotnet build` + Roslyn analyzers (SARIF) | [docs/packs/csharp.md](docs/packs/csharp.md) |
+| Secrets (cross-cutting, not a language) | gitleaks over the whole snapshot; flagged lines are withheld from reports and AI evidence | [docs/packs/secrets.md](docs/packs/secrets.md) |
 
 Packs activate only for projects affected by a change; tools are locked in `.pistos/lock.json` and
 never installed or upgraded by `review`. Decisions are documented in [docs/feedback.md](docs/feedback.md).

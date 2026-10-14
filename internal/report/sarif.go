@@ -149,6 +149,10 @@ func SARIF(w io.Writer, env *finding.Envelope, version string) error {
 		if is.AI != nil {
 			res.Properties["ai"] = is.AI
 		}
+		// Results never carry snippets; consumers that add their own must withhold sensitive lines.
+		if is.Sensitive {
+			res.Properties["sensitive"] = true
+		}
 		switch is.Change {
 		case "new", "worsened", "unknown":
 			res.BaselineState = "new"

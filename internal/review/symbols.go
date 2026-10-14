@@ -31,7 +31,10 @@ func newSourceCache() *sourceCache { return &sourceCache{files: map[string]*sour
 func (c *sourceCache) get(absPath, ecosystem string, content func() ([]byte, error)) *sourceFile {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if f, ok := c.files[absPath]; ok {
+	// Symbols depend on the ecosystem, and a repository-wide pack (secrets) reads the same files as
+	// the language packs, so entries are per ecosystem.
+	key := ecosystem + "\x00" + absPath
+	if f, ok := c.files[key]; ok {
 		return f
 	}
 	f := &sourceFile{}
@@ -39,7 +42,7 @@ func (c *sourceCache) get(absPath, ecosystem string, content func() ([]byte, err
 		f.lines = strings.Split(string(b), "\n")
 		f.symbols = symbolsFor(ecosystem, absPath, b, f.lines)
 	}
-	c.files[absPath] = f
+	c.files[key] = f
 	return f
 }
 

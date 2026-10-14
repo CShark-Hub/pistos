@@ -282,10 +282,19 @@ Planned tests: parser fixture; live new-secret blocks / baseline secret does not
 `.gitleaks.toml` respected; the secret string absent from cache, HTML, JSON, SARIF, agent output and AI
 call artifacts; docker equivalence.
 
-- [ ] `secrets` pack (gitleaks via go-install, pinned), accepted in `languages`, added by `init`
-- [ ] `gitleaks-json` parser dropping Match/Secret/Fingerprint
-- [ ] `Sensitive` flag: excerpts withheld in HTML/text/agent, no SARIF snippet, lines withheld from AI evidence
-- [ ] Docker image and third-party license entry
+- [x] `secrets` pack (gitleaks v8.30.1 via go-install, version from Go build info), accepted in `languages`, added by `init` (`--no-secrets` opts out); leaks exit 3 so gitleaks' fatal exit 1 is a failed check, not findings
+- [x] `gitleaks-json` parser decoding only rule, description and positions (Match/Secret/Fingerprint never read)
+- [x] `Sensitive` flag: lines withheld in HTML and agent excerpts (also as context of other issues), text never prints source, SARIF has no snippets, lines withheld from AI evidence; leak test covers all outputs, caches and AI requests
+- [x] Docker image (digest-pinned, 119 MB) with native/container equivalence; MIT entry in third-party.md
+- [x] Review source cache keyed per ecosystem (a secrets task reading a file first no longer strips Go/Python symbols)
+
+Limitations:
+- The pack lives in `internal/packs/secretscan/` (`packs.Dir` maps `secrets` to it) because a local permission rule blocks writing into directories named `secrets/`.
+- Directory scan of the snapshot only, no git history; `.gitleaksignore` fingerprints contain line numbers, so moving a line invalidates its entry.
+- Columns are reported as gitleaks gives them (one too high after the first line).
+- Only lines gitleaks flags are withheld; the identity anchor is still a hash of the flagged line.
+- Materialized snapshot trees in the pistos cache are plain copies and contain the secret.
+- Acquisition needs Go and network; not verified on macOS/Windows.
 
 ## Milestone 11 — AI review guidelines and spend cap
 

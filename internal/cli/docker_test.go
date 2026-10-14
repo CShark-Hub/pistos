@@ -98,6 +98,7 @@ func TestPackImagesExcludeUnrelatedRuntimes(t *testing.T) {
 		{"python", []string{"go", "dotnet"}},
 		{"jsts", []string{"go", "python3", "dotnet"}},
 		{"csharp", []string{"go", "node", "python3"}},
+		{"secrets", []string{"go", "node", "python3", "dotnet"}},
 	} {
 		m, _ := plugin.LoadManifest(tc.pack)
 		if rt.ImageID(context.Background(), m) == "" {
@@ -198,6 +199,23 @@ func TestNativeAndContainerAgreeCSharp(t *testing.T) {
 	})
 	if comparable(native) != comparable(container) || len(native.Canonical.Issues) < 1 {
 		t.Fatalf("native and container results differ:\n%q\n---\n%q", comparable(native), comparable(container))
+	}
+}
+
+func TestNativeAndContainerAgreeSecrets(t *testing.T) {
+	requireDocker(t)
+	cfg := secretsConfig(`["secrets"]`, "")
+	r := setupSecrets(t, cfg, nil)
+	native, container := reviewBothWays(t, r, cfg, func() {
+		r.Write("main.go", r.Read("main.go")+"\nconst token = \""+fakeGitHubToken+"\"\n")
+		r.Write(".gitleaks.toml", "[extend]\nuseDefault = true\n\n[[rules]]\nid = \"pistos-canary\"\ndescription = \"Pistos canary value\"\nregex = '''PISTOS_CANARY_[0-9]{6}'''\n")
+		r.Write("notes.md", "value: PISTOS_CANARY_123456\n")
+	})
+	if comparable(native) != comparable(container) || len(native.Canonical.Issues) != 2 {
+		t.Fatalf("native and container results differ:\n%q\n---\n%q", comparable(native), comparable(container))
+	}
+	if c := capability(container, "secrets", "gitleaks", "head"); c.ToolVersion != capability(native, "secrets", "gitleaks", "head").ToolVersion {
+		t.Fatalf("the image must carry the pinned gitleaks: %s", c.ToolVersion)
 	}
 }
 

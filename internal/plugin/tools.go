@@ -3,6 +3,7 @@ package plugin
 import (
 	"bytes"
 	"context"
+	"debug/buildinfo"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -303,6 +304,8 @@ func (tb *Toolbox) Identify(ctx context.Context, m *Manifest, name, projectDir s
 		// In docker mode a repository tool runs on the image's runtime, so the host may lack one.
 		if m.Tools[name].VersionFrom == "package-json" || (tb.Container != nil && m.Tools[name].Runtime != "") {
 			version, err = packageVersion(real)
+		} else if v, ok := goBuildVersion(m.Tools[name], real); ok {
+			version = v
 		} else {
 			version, err = ProbeVersion(ctx, m.Tools[name], exe, args, env)
 		}
@@ -400,6 +403,23 @@ func (tb *Toolbox) DotnetRoot(ctx context.Context, m *Manifest, projectDir strin
 		return "", err
 	}
 	return filepath.Dir(real), nil
+}
+
+// goBuildVersion reads the main module version stamped into a Go binary by `go install pkg@version`
+// (tools with version_from "go-buildinfo"). Development builds carry no version and report false.
+func goBuildVersion(t Tool, file string) (string, bool) {
+	if t.VersionFrom != "go-buildinfo" {
+		return "", false
+	}
+	bi, err := buildinfo.ReadFile(file)
+	if err != nil || bi.Main.Version == "" || bi.Main.Version == "(devel)" {
+		return "", false
+	}
+	m := regexp.MustCompile(t.VersionRegex).FindStringSubmatch(bi.Main.Version)
+	if len(m) < 2 {
+		return "", false
+	}
+	return m[1], true
 }
 
 // packageVersion reads the version of the npm package containing file.

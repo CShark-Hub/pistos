@@ -109,7 +109,7 @@ func TestHooksDefaults(t *testing.T) {
 }
 
 func TestLanguageAliases(t *testing.T) {
-	for in, want := range map[string]string{"js": JSTS, "TypeScript": JSTS, "py": Python, "golang": Go, "c#": CSharp, "cs": CSharp} {
+	for in, want := range map[string]string{"js": JSTS, "TypeScript": JSTS, "py": Python, "golang": Go, "c#": CSharp, "cs": CSharp, "Secrets": Secrets} {
 		if got, err := NormalizeLanguage(in); err != nil || got != want {
 			t.Errorf("%s -> %s, %v", in, got, err)
 		}
@@ -123,6 +123,21 @@ func TestRenderedConfigRoundTrips(t *testing.T) {
 	src := RenderConfig([]string{Go, CSharp}, []Project{{ID: "go", Root: ".", Ecosystem: Go, Checks: []string{"go-vet"}}})
 	if _, err := Parse([]byte(src)); err != nil {
 		t.Fatalf("init output must validate: %v\n%s", err, src)
+	}
+}
+
+func TestSecretsPackIsConfiguredLikeALanguage(t *testing.T) {
+	src := RenderConfig([]string{Go, Secrets}, []Project{{ID: "go", Root: ".", Ecosystem: Go, Checks: []string{"go-vet"}}, SecretsProject()})
+	c, err := Parse([]byte(src))
+	if err != nil {
+		t.Fatalf("%v\n%s", err, src)
+	}
+	if got := c.ActiveLanguages(); strings.Join(got, ",") != "go,secrets" {
+		t.Fatalf("languages = %v", got)
+	}
+	unlisted := strings.Replace(src, `languages = ["go", "secrets"]`, `languages = ["go"]`, 1)
+	if _, err := Parse([]byte(unlisted)); err == nil || !strings.Contains(err.Error(), `ecosystem "secrets" is not listed in languages`) {
+		t.Fatalf("a secrets project needs secrets in languages: %v", err)
 	}
 }
 

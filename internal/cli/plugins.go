@@ -59,7 +59,7 @@ func (a *app) pluginsCommand() *cobra.Command {
 	install.Flags().BoolVar(&o.Offline, "offline", false, "never download; only verify locally available tools")
 	image := &cobra.Command{
 		Use:   "image <pack>",
-		Short: "Build the container image of a pack (go, python, jsts, csharp) from the sources embedded in pistos",
+		Short: "Build the container image of a pack (go, python, jsts, csharp, secrets) from the sources embedded in pistos",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			eco, err := config.NormalizeLanguage(args[0])

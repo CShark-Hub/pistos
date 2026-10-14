@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"example.com/pistos/internal/ai"
+	"example.com/pistos/internal/config"
 	"example.com/pistos/internal/feedback"
 	"example.com/pistos/internal/finding"
 	"example.com/pistos/internal/snapshot"
@@ -30,6 +31,11 @@ func (e *engine) runAI(ctx context.Context, s finding.Scope, changes []snapshot.
 	ownerOf := func(p string) (finding.Project, bool) {
 		best, ok := finding.Project{}, false
 		for _, pr := range projects {
+			// The repository-wide secret scan owns no code: files only it covers (.env, CI
+			// configuration) are not sent as evidence.
+			if pr.Ecosystem == config.Secrets {
+				continue
+			}
 			if projectFilter(pr).Contains(p) && (!ok || len(pr.Root) > len(best.Root)) {
 				best, ok = pr, true
 			}
@@ -55,6 +61,7 @@ func (e *engine) runAI(ctx context.Context, s finding.Scope, changes []snapshot.
 	in := ai.Input{Repo: e.opts.Repo, Config: e.cfg, Tree: s.HeadTree, Refresh: e.opts.RefreshAI, Offline: e.opts.Offline}
 	budget := e.cfg.AI.Budget.MaxEvidenceChars
 	used := 0
+	withheld := finding.SensitiveLines(issues)
 	for _, p := range paths {
 		pr, ok := ownerOf(p)
 		// Pistos' own files (decisions, config) are policy, not code under review.
@@ -70,7 +77,11 @@ func (e *engine) runAI(ctx context.Context, s finding.Scope, changes []snapshot.
 			continue
 		}
 		used += len(b)
-		in.Files = append(in.Files, ai.File{Path: p, Project: pr.ID, Lines: strings.Split(strings.TrimSuffix(string(b), "\n"), "\n")})
+		// Lines flagged as possible secrets never leave the machine, whatever the issue's state.
+		lines := finding.WithholdLines(strings.Split(strings.TrimSuffix(string(b), "\n"), "\n"), withheld[p], func(family string) string {
+			return "[line withheld by pistos: possible secret (" + family + ")]"
+		})
+		in.Files = append(in.Files, ai.File{Path: p, Project: pr.ID, Lines: lines})
 	}
 	for _, is := range issues {
 		if is.Change != ChangeExisting {

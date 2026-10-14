@@ -96,9 +96,12 @@ type Finding struct {
 	Capability   string   `json:"capability"`
 	Reproduce    []string `json:"reproduce,omitempty"`
 	// Advisory findings are reported but never block the gate (e.g. metrics without a gate rule).
-	Advisory bool          `json:"advisory,omitempty"`
-	Metric   *MetricValue  `json:"metric,omitempty"`
-	AI       *AIProvenance `json:"ai,omitempty"`
+	Advisory bool `json:"advisory,omitempty"`
+	// Sensitive findings point at a possible secret: reports and AI evidence withhold the flagged
+	// lines. It is not part of the identity.
+	Sensitive bool          `json:"sensitive,omitempty"`
+	Metric    *MetricValue  `json:"metric,omitempty"`
+	AI        *AIProvenance `json:"ai,omitempty"`
 }
 
 // AIProvenance records how an AI issue was found and assessed. Votes are provenance, not confidence.
@@ -203,6 +206,7 @@ func Merge(fs []Finding, authority []string) []Finding {
 		}
 		cur := &out[i]
 		cur.Sources = append(cur.Sources, f.Sources...)
+		cur.Sensitive = cur.Sensitive || f.Sensitive
 		if rank(f.Sources[0].Tool) < rank(cur.Sources[0].Tool) {
 			cur.Message, cur.Capability = f.Message, f.Capability
 		}
