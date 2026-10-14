@@ -18,7 +18,7 @@
 | Cache | Granularity is the project subtree (not per package/file); out-of-root dependencies only via `references`/shared inputs |
 | Lock | One toolchain per platform; docker image IDs differ per machine because apt/npm/pip layers are not bit-reproducible |
 | Feedback | Rename verification needs an identical blob or a locally available origin tree/commit; two identical anchor lines in one symbol are distinguished by order |
-| AI | One OpenAI-compatible backend; no cumulative token budget; whole changed files as evidence (no chunking); same-model passes at temperature 0 add little diversity (see benchmarks) |
+| AI | One OpenAI-compatible backend; per-review spend cap only (no daily/monthly cap; USD is estimated from configured prices); whole changed files as evidence (no chunking); same-model passes at temperature 0 add little diversity (see benchmarks) |
 | Metrics | No cognitive complexity, no duplication detection; not equivalent to Sonar metrics |
 | Secrets | gitleaks 8.30.1 directory scan of the snapshot only (no git history); `.gitleaksignore` fingerprints contain line numbers; reported columns are one too high after the first line; flagged lines are withheld from HTML excerpts and AI evidence, but the identity anchor is still a hash of the flagged line |
 | Security | Native mode is not a sandbox; restricted docker profile is not a complete security boundary (kernel/runtime/base-image trust) |

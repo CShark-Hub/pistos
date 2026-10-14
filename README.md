@@ -87,7 +87,8 @@ semantic queries through language servers: `pistos facts references svc/main.go:
 
 Optional BYOK AI review (`--profile thorough`) runs independent discovery passes against any
 OpenAI-compatible endpoint, unions and triages their candidates and publishes advisory issues with
-provenance; see [docs/ai.md](docs/ai.md).
+provenance; see [docs/ai.md](docs/ai.md). Repository review guidelines in `.pistos/review.md` are
+added to the prompts, and `[ai.budget] max_review_usd` (or `--max-ai-usd`) caps each review's spend.
 
 Output formats: text, agent (compact, for coding agents), JSON, canonical JSON and SARIF 2.1.0.
 Coding agents can be gated with `pistos review --format agent` or, for Claude Code, a Stop hook

@@ -111,6 +111,11 @@ func RenderConfig(langs []string, projects []Project) string {
 	b.WriteString("[metrics]\n# Thresholds for the metrics check (definitions: docs/metrics.md). Advisory unless gate = true.\ngate = false\ncyclomatic = 10\nnesting = 4\nparams = 5\nstatements = 50\n\n")
 	b.WriteString("[hooks]\n# Profiles used by `pistos hooks run` (git hooks: `pistos hooks install`; docs/hooks.md).\n# The fast profile skips project-aware checks such as go vet, tsc and pyright.\npre_commit_profile = \"fast\"\npre_push_profile = \"balanced\"\nclaude_profile = \"fast\"\n# Incomplete reviews (missing tools, failed checks) only warn unless this is true.\nblock_on_incomplete = false\n\n")
 	b.WriteString("[ai]\n# AI review is advisory and disabled until models are configured.\nenabled = false\nrequired = false\naggregation = \"union\"\nreuse_results = true\n")
+	b.WriteString("# Review guidelines for the models: .pistos/review.md is used when it exists. Other files (AGENTS.md,\n" +
+		"# CLAUDE.md, …) only when listed; paths limits an entry to evidence under those globs (docs/ai.md).\n" +
+		"# [[ai.instructions]]\n# file = \".pistos/review.md\"\n# paths = [\"internal/api/**\"]\n" +
+		"# Per-review spend cap (0 = unlimited; the USD cap needs prices on the [models.*] aliases):\n" +
+		"# [ai.budget]\n# max_review_usd = 0.50\n# max_review_tokens = 500000\n")
 	for _, p := range projects {
 		b.WriteString("\n[[projects]]\n")
 		fmt.Fprintf(&b, "id = %s\nroot = %s\necosystem = %s\nchecks = %s\n",

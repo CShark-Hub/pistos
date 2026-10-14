@@ -207,12 +207,20 @@ func (a *app) runAISetup(ctx context.Context, repo string, p *prompter) error {
 	setup.Required = cfg.AI.Required
 	setup.ReuseResults = cfg.AI.ReuseResults == nil || *cfg.AI.ReuseResults
 
+	if cfg.AI.Budget.MaxReviewUSD > 0 {
+		for _, m := range setup.Models {
+			if !m.Priced() {
+				return fmt.Errorf("ai.budget.max_review_usd is set, but the endpoint publishes no prices for %s; nothing was written (remove the cap, or rerun setup and add prompt_usd_per_mtok / completion_usd_per_mtok to [models.%s] by hand afterwards)", m.Model, m.Alias)
+			}
+		}
+	}
 	next, err := config.RewriteAI(src, setup)
 	if err != nil {
 		return err
 	}
 	fmt.Fprintln(out, "\nThis replaces the AI tables of .pistos/config.toml with:")
 	fmt.Fprintln(out, indent(config.RenderAI(setup)))
+	fmt.Fprintln(out, reviewCostEstimate(setup, cfg.AI.Budget))
 	if ok, err := p.yes("Write it?", true); err != nil || !ok {
 		if err == nil {
 			fmt.Fprintln(out, "nothing was written")
@@ -235,6 +243,45 @@ func (a *app) runAISetup(ctx context.Context, repo string, p *prompter) error {
 	}
 	fmt.Fprintln(out, "next: pistos review --profile thorough")
 	return nil
+}
+
+// assumedCompletionTokens is used for the estimate when no max_tokens bounds completions.
+const assumedCompletionTokens = 4096
+
+// reviewCostEstimate prices the most expensive review the configuration allows without a cap: every
+// pass sends the full evidence budget (a token per three characters) and uses its whole completion
+// allowance, and model triage costs one more call of that size. Small changes cost far less.
+func reviewCostEstimate(s config.AISetup, b config.AIBudget) string {
+	models := map[string]config.ModelAlias{}
+	for _, m := range s.Models {
+		models[m.Alias] = m.ModelAlias
+	}
+	evidence := b.MaxEvidenceChars
+	if evidence == 0 {
+		evidence = 200_000
+	}
+	completion := b.MaxTokens
+	if completion == 0 {
+		completion = assumedCompletionTokens
+	}
+	aliases := make([]string, 0, len(s.Passes)+1)
+	for _, p := range s.Passes {
+		aliases = append(aliases, p.Model)
+	}
+	if s.Triage.Mode == "model" {
+		aliases = append(aliases, s.Triage.Model)
+	}
+	usd := 0.0
+	for _, a := range aliases {
+		m := models[a]
+		if !m.Priced() {
+			return "Estimated cost per review: unknown (the endpoint publishes no prices for " + m.Model + ")."
+		}
+		usd += float64(evidence/3)/1e6**m.PromptUSDPerMTok + float64(completion)/1e6**m.CompletionUSDPerMTok
+	}
+	return fmt.Sprintf("Estimated cost per review: at most ~$%.4f (an estimate from catalog prices: %d call(s), each with the full\n"+
+		"%d-character evidence budget and %d completion tokens; reviews of small changes cost much less).\n"+
+		"Cap it with [ai.budget] max_review_usd or `pistos review --max-ai-usd`.", usd, len(aliases), evidence, completion)
 }
 
 func indent(s string) string {
@@ -512,10 +559,18 @@ func (a *app) chooseModels(p *prompter, pc *providerChoice) (config.AISetup, err
 		if pc.openRouter {
 			conc = 4
 		}
-		setup.Models = append(setup.Models, config.NamedModel{Alias: name, ModelAlias: config.ModelAlias{
+		m := config.ModelAlias{
 			Backend: "openai-compatible", Endpoint: pc.endpoint, Model: modelID, APIKeyEnv: pc.keyEnv,
 			Timeout: config.Duration{Duration: 2 * time.Minute}, Concurrency: conc,
-		}})
+		}
+		// Catalog prices make spend estimates and caps possible; unknown (negative) prices are omitted.
+		for _, info := range pc.models {
+			if info.ID == modelID && info.PromptPrice >= 0 && info.CompletionPrice >= 0 {
+				prompt, completion := info.PromptPrice, info.CompletionPrice
+				m.PromptUSDPerMTok, m.CompletionUSDPerMTok = &prompt, &completion
+			}
+		}
+		setup.Models = append(setup.Models, config.NamedModel{Alias: name, ModelAlias: m})
 		return name
 	}
 	prev := ""

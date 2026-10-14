@@ -305,6 +305,14 @@ Planned tests (fake endpoint): path-scoped inclusion, base-tree guidelines, repl
 exactly the last pass, triage skipped → needs-investigation, `ai.required` → incomplete, replays free;
 missing price with a USD cap is a config error; reported spend matches fake usage.
 
-- [ ] `[[ai.instructions]]` with size cap, provenance in AI notes, trust from base tree
-- [ ] Spend meter (reserve before call, settle on usage, failures keep reservation), `--max-ai-usd`
-- [ ] Model prices written by `ai setup`; spend line in text/agent/JSON
+- [x] `[[ai.instructions]]` (default `.pistos/review.md`), 16k-char cap with truncation note, recorded in canonical `ai.guidelines[]`, read from the base tree under `--feedback-from-base`; prompt header names the file only so unrelated edits keep replays
+- [x] Spend meter: discovery reserved in config order before launch, triage after settlement, retries reserve again (`Request.BeforeRetry`), failed attempts keep their reservation, replays free; skipped calls get status `skipped` and never count as clean
+- [x] `ai.budget.max_tokens` now actually sent; with a cap and no limit, requests use `CappedMaxTokens` (4096) outside the replay key
+- [x] Model prices (`prompt_usd_per_mtok`, `completion_usd_per_mtok`) written by `ai setup` with a per-review cost estimate; spend in `telemetry.ai_spend`, printed by text and agent output; `--max-ai-usd`
+- [x] Provider reports the real attempt count after a non-transient failure
+
+Limitations:
+- Per-review cap only; no daily/monthly cumulative cap; OpenRouter `usage.cost` not used.
+- USD figures are estimates from configured prices; the token estimate counts bytes, not runes.
+- The HTML report does not show spend; a listed guideline missing from the tree is a note, not an error.
+- Users who had `ai.budget.max_tokens` set lose their recorded replays once.

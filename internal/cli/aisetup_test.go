@@ -109,6 +109,16 @@ func TestAISetupOpenAICompatible(t *testing.T) {
 	if cfg.Models[cfg.AI.Discovery[2].Model].Model != "other/llama-3" || cfg.AI.Triage.Model != cfg.AI.Discovery[0].Model || len(cfg.Models) != 2 {
 		t.Fatalf("aliases: %+v %+v", cfg.AI, cfg.Models)
 	}
+	// Catalog prices are written for spend estimates and caps; unpublished prices are left out.
+	if m := cfg.Models[cfg.AI.Discovery[1].Model]; !m.Priced() || *m.PromptUSDPerMTok != 0.15 || *m.CompletionUSDPerMTok != 0.6 {
+		t.Fatalf("prices: %+v", m)
+	}
+	if m := cfg.Models[cfg.AI.Discovery[2].Model]; m.PromptUSDPerMTok != nil || m.CompletionUSDPerMTok != nil {
+		t.Fatalf("unknown prices must be omitted: %+v", m)
+	}
+	if !strings.Contains(string(raw), "prompt_usd_per_mtok = 0.15") || !strings.Contains(out, "Estimated cost per review: unknown (the endpoint publishes no prices for other/llama-3)") {
+		t.Fatalf("prices and estimate:\n%s\n%s", raw, out)
+	}
 	fi, err := os.Stat(os.Getenv("PISTOS_CREDENTIALS_FILE"))
 	if err != nil || (fi.Mode().Perm()&0o077 != 0 && os.PathSeparator == '/') {
 		t.Fatalf("credentials file must exist and be private: %v %v", fi, err)
@@ -172,5 +182,36 @@ func TestAISetupAbortsWithoutWriting(t *testing.T) {
 	}
 	if code, _, errs := runInput(t, dir, "1\n", "ai", "setup"); code != ExitError || !strings.Contains(errs, "input ended") {
 		t.Fatalf("ended input must abort: %d %s", code, errs)
+	}
+}
+
+func TestAISetupCostEstimate(t *testing.T) {
+	price := func(v float64) *float64 { return &v }
+	m := config.ModelAlias{Model: "acme/gpt-mini", PromptUSDPerMTok: price(1), CompletionUSDPerMTok: price(2)}
+	s := config.AISetup{
+		Passes: []config.AIPass{{ID: "pass-1", Model: "m"}, {ID: "pass-2", Model: "m"}},
+		Triage: config.AITriage{Mode: "model", Model: "m"},
+		Models: []config.NamedModel{{Alias: "m", ModelAlias: m}},
+	}
+	// 3 calls × (300000/3 prompt tokens × $1/M + 1000 completion tokens × $2/M) = 3 × $0.102.
+	got := reviewCostEstimate(s, config.AIBudget{MaxEvidenceChars: 300_000, MaxTokens: 1000})
+	if !strings.Contains(got, "at most ~$0.3060 (an estimate") || !strings.Contains(got, "3 call(s)") {
+		t.Fatalf("estimate: %s", got)
+	}
+}
+
+func TestAISetupRefusesUnpricedModelsUnderAUSDCap(t *testing.T) {
+	s := fakeProvider(t, false)
+	dir := setupRepo(t)
+	t.Setenv("PISTOS_AI_KEY", "")
+	p := filepath.Join(dir, ".pistos", "config.toml")
+	src, _ := os.ReadFile(p)
+	os.WriteFile(p, []byte(strings.Replace(string(src), "max_candidates = 7\n", "max_candidates = 7\nmax_review_usd = 1.0\n", 1)), 0o644)
+	before, _ := os.ReadFile(p)
+	input := strings.Join([]string{"1", s.URL + "/v1", "good", "", "n", "1", "other/llama-3", "2"}, "\n") + "\n"
+	code, out, errs := runInput(t, dir, input, "ai", "setup")
+	after, _ := os.ReadFile(p)
+	if code != ExitError || !strings.Contains(errs, "publishes no prices for other/llama-3") || !bytes.Equal(before, after) {
+		t.Fatalf("an unpriced model under a USD cap must abort without writing: %d\n%s\n%s", code, out, errs)
 	}
 }

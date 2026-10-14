@@ -25,6 +25,9 @@ type Message struct {
 type Request struct {
 	Messages  []Message
 	MaxTokens int
+	// BeforeRetry, when set, is asked before every retry; false stops retrying (the spend cap uses it
+	// to reserve each further attempt).
+	BeforeRetry func() bool
 }
 
 type Usage struct {
@@ -129,7 +132,9 @@ func (p *openAICompatible) Complete(ctx context.Context, r Request) (Response, e
 	}
 	payload, _ := json.Marshal(body)
 	var lastErr error
+	attempts := 0
 	for attempt := 1; attempt <= maxAttempts; attempt++ {
+		attempts = attempt
 		resp, err := p.once(ctx, payload)
 		if err == nil {
 			resp.Attempts = attempt
@@ -139,13 +144,16 @@ func (p *openAICompatible) Complete(ctx context.Context, r Request) (Response, e
 		if !transient(err) || attempt == maxAttempts {
 			break
 		}
+		if r.BeforeRetry != nil && !r.BeforeRetry() {
+			return Response{Attempts: attempt}, p.redact(lastErr)
+		}
 		select {
 		case <-time.After(time.Duration(attempt) * 500 * time.Millisecond):
 		case <-ctx.Done():
 			return Response{Attempts: attempt}, p.redact(ctx.Err())
 		}
 	}
-	return Response{Attempts: maxAttempts}, p.redact(lastErr)
+	return Response{Attempts: attempts}, p.redact(lastErr)
 }
 
 func (p *openAICompatible) once(ctx context.Context, payload []byte) (Response, error) {

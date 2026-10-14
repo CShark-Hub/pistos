@@ -124,6 +124,10 @@ func RenderAI(s AISetup) string {
 		if m.Concurrency > 0 {
 			fmt.Fprintf(&b, "concurrency = %d\n", m.Concurrency)
 		}
+		if m.Priced() {
+			fmt.Fprintf(&b, "prompt_usd_per_mtok = %s   # from the provider's catalog; used to estimate and cap spend\ncompletion_usd_per_mtok = %s\n",
+				strconv.FormatFloat(*m.PromptUSDPerMTok, 'f', -1, 64), strconv.FormatFloat(*m.CompletionUSDPerMTok, 'f', -1, 64))
+		}
 	}
 	return b.String()
 }

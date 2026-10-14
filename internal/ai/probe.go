@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"sort"
 	"strconv"
@@ -147,5 +148,7 @@ func perMillion(perToken string) float64 {
 	if err != nil || v < 0 {
 		return -1
 	}
-	return v * 1e6
+	// Rounded to a millionth of a dollar per million tokens, so "0.00000015" becomes 0.15, not
+	// 0.15000000000000002, in config.toml.
+	return math.Round(v*1e12) / 1e6
 }

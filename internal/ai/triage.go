@@ -82,7 +82,7 @@ type assessment struct {
 // modelTriage hides pass identity and vote counts: the triager sees neutral ids, the hypothesis,
 // its assumptions and the surrounding code only.
 func (e *engine) modelTriage(ctx context.Context, ids []string, clusters map[string][]int, cands []finding.Candidate) (map[string]assessment, error) {
-	system, err := prompt(e.in.Repo, "triage.md")
+	system, err := e.systemPrompt("triage.md")
 	if err != nil {
 		return nil, err
 	}

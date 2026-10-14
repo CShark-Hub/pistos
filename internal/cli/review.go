@@ -98,6 +98,7 @@ func (a *app) reviewCommand() *cobra.Command {
 	var format string
 	var includeIgnored, includeExisting, verbose, noHTML bool
 	var maxIssues int
+	var maxAIUSD float64
 	cmd := &cobra.Command{
 		Use:   "review",
 		Short: "Review changes with the fixed deterministic check plan",
@@ -120,6 +121,9 @@ contain), against HEAD or merge-base(--base, HEAD). --all reviews the whole work
 				return err
 			}
 			o.Repo = repo
+			if cmd.Flags().Changed("max-ai-usd") {
+				o.MaxAIUSD = &maxAIUSD
+			}
 			if verbose {
 				o.Progress = func(s string) { fmt.Fprintln(a.stderr, "·", s) }
 			}
@@ -159,6 +163,7 @@ contain), against HEAD or merge-base(--base, HEAD). --all reviews the whole work
 	f.BoolVar(&includeExisting, "include-existing", false, "also list issues already present in the baseline")
 	f.BoolVar(&o.RefreshAI, "refresh-ai", false, "run fresh AI discovery instead of replaying recorded responses")
 	f.BoolVar(&o.FeedbackFromBase, "feedback-from-base", false, "apply the baseline's committed decisions (for untrusted changes)")
+	f.Float64Var(&maxAIUSD, "max-ai-usd", 0, "cap this review's estimated AI spend in USD, overriding ai.budget.max_review_usd (0 = unlimited)")
 	f.BoolVar(&noHTML, "no-html", false, "do not write .pistos/state/report.html")
 	f.BoolVarP(&verbose, "verbose", "v", false, "print progress to stderr")
 	return cmd

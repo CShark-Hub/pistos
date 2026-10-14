@@ -135,6 +135,19 @@ type AIReport struct {
 	Triage     AIPassStatus   `json:"triage"`
 	Candidates []Candidate    `json:"candidates"`
 	Notes      []string       `json:"notes,omitempty"`
+	// Guidelines lists the repository review guidelines added to the system prompts.
+	Guidelines []AIGuideline `json:"guidelines,omitempty"`
+}
+
+// AIGuideline records one review guideline file and where it was read from.
+type AIGuideline struct {
+	File string `json:"file"`
+	// Side is "head" (the reviewed snapshot) or "base" (under --feedback-from-base).
+	Side      string `json:"side"`
+	Tree      string `json:"tree"`
+	Blob      string `json:"blob"`
+	Bytes     int    `json:"bytes"`
+	Truncated bool   `json:"truncated,omitempty"`
 }
 
 type Scope struct {
@@ -186,6 +199,7 @@ type Telemetry struct {
 	Jobs       int               `json:"jobs"`
 	Tasks      []TaskTelemetry   `json:"tasks,omitempty"`
 	AI         []AICallTelemetry `json:"ai,omitempty"`
+	AISpend    *AISpend          `json:"ai_spend,omitempty"`
 }
 
 // AICallTelemetry is volatile: replays and retries change it without changing the canonical report.
@@ -196,6 +210,31 @@ type AICallTelemetry struct {
 	PromptTokens     int    `json:"prompt_tokens"`
 	CompletionTokens int    `json:"completion_tokens"`
 	DurationMS       int64  `json:"duration_ms"`
+	// EstimatedTokens is the reservation made against the spend cap per attempt (0 for replays).
+	EstimatedTokens int `json:"estimated_tokens,omitempty"`
+	// Skipped calls were not made because the spend cap did not allow them.
+	Skipped bool `json:"skipped,omitempty"`
+}
+
+// AISpend is the provider spend of one review's non-replayed AI calls. It is volatile telemetry:
+// replays cost nothing, and retries or provider-reported usage change it without changing the
+// canonical report.
+type AISpend struct {
+	Calls    int `json:"calls"`
+	Replayed int `json:"replayed"`
+	// PromptTokens and CompletionTokens are the usage the providers reported.
+	PromptTokens     int `json:"prompt_tokens"`
+	CompletionTokens int `json:"completion_tokens"`
+	// Charged is what the cap counts: reported usage, plus the full reservation of attempts that
+	// failed or reported no usage (they may still have been billed).
+	ChargedTokens int     `json:"charged_tokens"`
+	ChargedUSD    float64 `json:"charged_usd"`
+	// USDKnown is false when a charged call used a model without prices; ChargedUSD then undercounts.
+	USDKnown        bool    `json:"usd_known"`
+	MaxReviewTokens int     `json:"max_review_tokens,omitempty"`
+	MaxReviewUSD    float64 `json:"max_review_usd,omitempty"`
+	// Skipped names the calls the cap did not allow.
+	Skipped []string `json:"skipped,omitempty"`
 }
 
 type TaskTelemetry struct {

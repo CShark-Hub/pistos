@@ -77,6 +77,9 @@ func Text(w io.Writer, env *finding.Envelope, o TextOptions) {
 	}
 	if !o.Brief {
 		fmt.Fprintf(w, "ai       %s\n", r.Coverage.AI)
+		if sp := env.Telemetry.AISpend; sp != nil {
+			fmt.Fprintf(w, "         %s\n", AISpendLine(sp))
+		}
 	}
 
 	var shown, hidden, existing int
@@ -154,6 +157,34 @@ func printIssue(w io.Writer, n int, is finding.Issue) {
 	if is.Disposition.Note != "" {
 		fmt.Fprintf(w, "         note: %s\n", is.Disposition.Note)
 	}
+}
+
+// AISpendLine summarizes a review's AI spend: charged tokens, the USD estimate when prices are
+// known, replays and the configured caps.
+func AISpendLine(sp *finding.AISpend) string {
+	s := fmt.Sprintf("spend %d tokens", sp.ChargedTokens)
+	if sp.USDKnown {
+		s += fmt.Sprintf(" (~$%.4f estimated)", sp.ChargedUSD)
+	} else {
+		s += " (USD unknown: a model has no prices)"
+	}
+	s += fmt.Sprintf(" in %d call(s), %d replayed for free", sp.Calls, sp.Replayed)
+	var caps []string
+	if sp.MaxReviewTokens > 0 {
+		caps = append(caps, fmt.Sprintf("%d tokens", sp.MaxReviewTokens))
+	}
+	if sp.MaxReviewUSD > 0 {
+		caps = append(caps, fmt.Sprintf("$%.4f", sp.MaxReviewUSD))
+	}
+	if len(caps) > 0 {
+		s += "; cap " + strings.Join(caps, " and ")
+	} else {
+		s += "; no cap"
+	}
+	if len(sp.Skipped) > 0 {
+		s += "; skipped by the cap: " + strings.Join(sp.Skipped, ", ")
+	}
+	return s
 }
 
 func short(id string) string {

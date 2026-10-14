@@ -23,8 +23,12 @@ when AI is off and the session is interactive. The flow:
 5. **Models per review** (default 3, the union + triage design point), then one model per pass,
    searched by name or picked by number; pass N defaults to pass N−1's model.
 6. **Triage**: a model (default for 2+ passes) or evidence only.
-7. A preview of the tables, then they are written. `[ai]`, `[[ai.discovery]]`, `[ai.triage]` and
-   `[models.*]` are replaced; `[ai.budget]` and everything else are left untouched.
+7. A preview of the tables, with an estimated cost per review when the catalog has prices (an upper
+   estimate: every call with the full evidence budget and its whole completion allowance), then they
+   are written. Catalog prices are written as `prompt_usd_per_mtok` / `completion_usd_per_mtok`.
+   `[ai]`, `[[ai.discovery]]`, `[ai.triage]` and `[models.*]` are replaced; `[ai.budget]`,
+   `[[ai.instructions]]` and everything else are left untouched. With `max_review_usd` set, setup
+   refuses models without published prices.
 
 Manual configuration:
 
@@ -37,8 +41,16 @@ reuse_results = true
 
 [ai.budget]
 max_candidates = 20       # per pass; extra candidates are recorded as rejected
-max_tokens = 4096         # sent as max_tokens on every request
+max_tokens = 4096         # sent as max_tokens on every request (a model's own max_tokens wins)
 max_evidence_chars = 200000
+max_review_tokens = 0     # per-review spend cap in tokens; 0 = unlimited
+max_review_usd = 0.50     # per-review spend cap in USD; needs prices on every alias used; 0 = unlimited
+
+[[ai.instructions]]       # optional; without entries .pistos/review.md is used when it exists
+file = ".pistos/review.md"
+[[ai.instructions]]
+file = "docs/api-review.md"
+paths = ["internal/api/**"]   # only when an evidence file matches
 
 [[ai.discovery]]
 id = "pass-1"
@@ -62,6 +74,8 @@ model = "provider-model-id"
 api_key_env = "PISTOS_REVIEWER_A_KEY"     # the variable's name; the key itself is never in the repository
 timeout = "120s"
 concurrency = 2                            # simultaneous requests to this endpoint
+prompt_usd_per_mtok = 0.15                 # optional prices (USD per million tokens) for estimates and caps
+completion_usd_per_mtok = 0.60
 ```
 
 ## Backend
@@ -99,6 +113,60 @@ twice with backoff; attempts are recorded in telemetry.
    assumptions, failing scenario); feedback decisions apply to them like to any other issue.
 
 A failed or offline pass is a degraded result (`incomplete`), never a vote of "no issues".
+
+## Review guidelines
+
+Repository-specific review guidance (focus areas, conventions, known pitfalls) goes in
+`.pistos/review.md`, which is used automatically when it exists and no `[[ai.instructions]]` entry
+is configured. Other files, such as `AGENTS.md` or `CLAUDE.md`, are used only when listed. An entry
+with `paths` (globs relative to the repository root, same syntax as project include/exclude) applies
+only when one of them matches a file in the evidence. Files must be clean repository-relative paths;
+unknown keys are rejected.
+
+- **Placement**: each file is appended to the discovery and triage system prompts as
+  `## Repository review guidelines (from <file>)`, after the built-in rules and under an explicit
+  statement that guidelines may add focus areas and conventions but never override those rules
+  (repository content is untrusted data, no commands, no decision changes, the fixed answer format).
+- **Source**: read from git, not the working directory: from the reviewed snapshot normally, from the
+  baseline under `--feedback-from-base` (see docs/security.md). The AI report lists each file used
+  (`guidelines`: file, side, tree, blob, bytes, truncated); listed files missing from that tree are noted.
+- **Size**: at most 16,000 characters in total, in configuration order; the file that crosses the cap
+  is cut (marked `[truncated by pistos]`), later ones are sent empty, and a note says so.
+- **Replay**: guidelines are part of the system messages, which are part of the replay key, so
+  editing a guideline re-runs discovery and triage; unchanged guidelines replay. The prompt names the
+  file but not the tree, so unrelated commits do not invalidate recordings.
+
+## Spend cap
+
+`[ai.budget] max_review_tokens` and `max_review_usd` cap what one review may spend on provider calls
+(`pistos review --max-ai-usd N` overrides the USD cap; `0` lifts it). The USD cap fails closed: a
+model alias used by discovery or triage without both prices is a configuration error naming it.
+
+- **Reservation**: before a call that is not a replay, pistos reserves a conservative estimate: one
+  token per three prompt characters (bytes) plus the full `max_tokens` completion allowance, priced
+  with the alias's prices. When a cap is set and no `max_tokens` is configured, requests are bounded
+  at 4096 completion tokens (this bound is not part of the replay key). If charged plus reserved spend
+  would exceed a cap, the call is not made: the pass is `skipped` with an error starting
+  `skipped: AI budget`. A skipped pass is never a clean vote; the AI status is incomplete, and with
+  `ai.required` the review exits 2.
+- **Order**: discovery passes reserve in configuration order before any of them starts, so the
+  passes a cap skips are always the last configured ones. Model triage reserves after discovery has
+  settled; a skipped triage leaves every cluster `needs-investigation`.
+- **Settlement**: a successful call is charged its reported usage. Attempts that failed, or a
+  success without reported usage, stay charged at their reservation: they may have been billed.
+- **Retries**: every retry of a transient failure reserves another attempt first; when the cap has
+  no room, the call stops retrying and fails (`not retried: skipped: AI budget`). Retries run inside
+  concurrent passes, so which retry is refused can vary; the first attempts cannot.
+- **Replays** cost nothing and are never refused, so an exhausted cap still replays offline.
+- **Reporting**: JSON `telemetry.ai_spend` (`calls`, `replayed`, `prompt_tokens`,
+  `completion_tokens`, `charged_tokens`, `charged_usd`, `usd_known`, `max_review_tokens`,
+  `max_review_usd`, `skipped`) and per-call `estimated_tokens` / `skipped` in `telemetry.ai`. It is
+  volatile telemetry, not part of the canonical report (which already records skipped passes). The
+  text output prints a spend line under `ai`.
+
+USD figures are estimates from configured prices, not invoices. Not built yet: daily or monthly
+cumulative caps across reviews, and using a provider's reported cost (OpenRouter's `usage.cost`)
+instead of token × price.
 
 ## Replay and lifecycle
 

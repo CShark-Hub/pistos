@@ -8,6 +8,7 @@ import (
 	"path"
 	"path/filepath"
 	"strings"
+	"unicode/utf8"
 
 	"example.com/pistos/internal/ai"
 	"example.com/pistos/internal/config"
@@ -100,12 +101,88 @@ func (e *engine) runAI(ctx context.Context, s finding.Scope, changes []snapshot.
 		}
 		in.Decisions = append(in.Decisions, dd)
 	}
+	in.Guidelines, in.Notes = e.loadGuidelines(ctx, s, in.Files)
 	in.Symbol = func(p string, line int) string {
 		pr, _ := ownerOf(p)
 		abs := filepath.Join(workRoot, filepath.FromSlash(p))
 		return e.sources.get(abs, pr.Ecosystem, func() ([]byte, error) { return os.ReadFile(abs) }).enclosing(line)
 	}
 	return ai.Run(ctx, in), nil
+}
+
+// loadGuidelines reads the review guidelines that apply to this evidence from git: from the reviewed
+// head tree, or from the baseline under --feedback-from-base, so an untrusted change cannot rewrite
+// its own review instructions. Without [[ai.instructions]], .pistos/review.md is used if present.
+// The total is capped at ai.MaxGuidelineChars, truncating in configuration order.
+func (e *engine) loadGuidelines(ctx context.Context, s finding.Scope, files []ai.File) ([]ai.Guideline, []string) {
+	tree, side := s.HeadTree, sideHead
+	if e.opts.FeedbackFromBase {
+		tree, side = s.BaseTree, sideBase
+	}
+	entries := e.cfg.AI.Instructions
+	explicit := len(entries) > 0
+	if !explicit {
+		entries = []config.AIInstruction{{File: config.DefaultInstructions}}
+	}
+	var out []ai.Guideline
+	var notes []string
+	used := map[string]bool{}
+	left := ai.MaxGuidelineChars
+	for _, in := range entries {
+		if used[in.File] || !guidelineApplies(in, files) {
+			continue
+		}
+		blob := e.git.ObjectID(ctx, tree, in.File)
+		if blob == "" {
+			if explicit {
+				notes = append(notes, fmt.Sprintf("review guideline %s is not in the %s tree; not used", in.File, side))
+			}
+			continue
+		}
+		b, err := e.git.Show(ctx, tree, in.File)
+		if err != nil || bytes.IndexByte(b, 0) >= 0 {
+			notes = append(notes, fmt.Sprintf("review guideline %s is not a text file in the %s tree; not used", in.File, side))
+			continue
+		}
+		used[in.File] = true
+		g := ai.Guideline{Record: finding.AIGuideline{File: in.File, Side: side, Tree: tree, Blob: blob, Bytes: len(b)}, Text: string(b)}
+		if len(g.Text) > left {
+			g.Text = truncateUTF8(g.Text, left) + "\n[truncated by pistos]"
+			g.Record.Truncated = true
+			notes = append(notes, fmt.Sprintf("review guidelines are capped at %d characters in total: %s was truncated to %d of %d", ai.MaxGuidelineChars, in.File, left, len(b)))
+			left = 0
+		} else {
+			left -= len(g.Text)
+		}
+		out = append(out, g)
+	}
+	return out, notes
+}
+
+// guidelineApplies: an entry without paths always applies; otherwise one of its globs (relative to
+// the repository root) must match an evidence file.
+func guidelineApplies(in config.AIInstruction, files []ai.File) bool {
+	if len(in.Paths) == 0 {
+		return true
+	}
+	filter := config.PathFilter{Root: ".", Include: in.Paths}
+	for _, f := range files {
+		if filter.Contains(f.Path) {
+			return true
+		}
+	}
+	return false
+}
+
+// truncateUTF8 cuts s to at most n bytes without splitting a character.
+func truncateUTF8(s string, n int) string {
+	if len(s) <= n {
+		return s
+	}
+	for n > 0 && !utf8.RuneStart(s[n]) {
+		n--
+	}
+	return s[:n]
 }
 
 // ownedByAny keeps AI findings to files some analyzed project still claims after its path filters.

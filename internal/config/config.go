@@ -118,7 +118,20 @@ type AI struct {
 	Discovery    []AIPass `toml:"discovery"`
 	Triage       AITriage `toml:"triage"`
 	Budget       AIBudget `toml:"budget"`
+	// Instructions are repository review guidelines added to the system prompts. Without entries,
+	// .pistos/review.md is used when it exists.
+	Instructions []AIInstruction `toml:"instructions"`
 }
+
+// AIInstruction names a guideline file (repository-relative) and, optionally, globs relative to the
+// repository root: the file applies only when one of them matches an evidence file.
+type AIInstruction struct {
+	File  string   `toml:"file"`
+	Paths []string `toml:"paths"`
+}
+
+// DefaultInstructions is the guideline file used when no [[ai.instructions]] entry is configured.
+const DefaultInstructions = Dir + "/review.md"
 
 type AIPass struct {
 	ID    string `toml:"id"`
@@ -135,7 +148,14 @@ type AIBudget struct {
 	MaxCandidates    int `toml:"max_candidates"`
 	MaxTokens        int `toml:"max_tokens"`
 	MaxEvidenceChars int `toml:"max_evidence_chars"`
+	// MaxReviewTokens and MaxReviewUSD cap the provider spend of one review (0 = unlimited). The USD
+	// cap needs prices on every model alias the review uses.
+	MaxReviewTokens int     `toml:"max_review_tokens"`
+	MaxReviewUSD    float64 `toml:"max_review_usd"`
 }
+
+// Capped reports whether a per-review spend cap is configured.
+func (b AIBudget) Capped() bool { return b.MaxReviewTokens > 0 || b.MaxReviewUSD > 0 }
 
 type ModelAlias struct {
 	Backend   string   `toml:"backend"`
@@ -146,7 +166,13 @@ type ModelAlias struct {
 	MaxTokens int      `toml:"max_tokens"`
 	// Concurrency limits simultaneous requests to this alias's endpoint.
 	Concurrency int `toml:"concurrency"`
+	// Prices in USD per million tokens, used to estimate and cap spend; nil when unknown.
+	PromptUSDPerMTok     *float64 `toml:"prompt_usd_per_mtok"`
+	CompletionUSDPerMTok *float64 `toml:"completion_usd_per_mtok"`
 }
+
+// Priced reports whether both token prices are known.
+func (m ModelAlias) Priced() bool { return m.PromptUSDPerMTok != nil && m.CompletionUSDPerMTok != nil }
 
 type Duration struct{ time.Duration }
 
@@ -377,6 +403,28 @@ func (c *Config) Validate() error {
 	if c.AI.Enabled && len(c.AI.Discovery) == 0 {
 		add("ai.enabled requires at least one [[ai.discovery]] pass")
 	}
+	for i, in := range c.AI.Instructions {
+		where := fmt.Sprintf("ai.instructions[%d]", i)
+		if f, err := CleanRel(in.File); err != nil || f != in.File || f == "." || strings.ContainsAny(f, "*?[") {
+			add("%s.file %q must be a clean repository-relative file path", where, in.File)
+		}
+		for _, g := range in.Paths {
+			if err := validateGlob(g); err != nil {
+				add("%s.paths: %v", where, err)
+			}
+		}
+	}
+	b := c.AI.Budget
+	if b.MaxCandidates < 0 || b.MaxTokens < 0 || b.MaxEvidenceChars < 0 || b.MaxReviewTokens < 0 || b.MaxReviewUSD < 0 {
+		add("ai.budget values must not be negative")
+	}
+	if b.MaxReviewUSD > 0 {
+		for _, alias := range c.AIModelsUsed() {
+			if m, ok := c.Models[alias]; ok && !m.Priced() {
+				add("models.%s needs prompt_usd_per_mtok and completion_usd_per_mtok because ai.budget.max_review_usd is set (an unpriced model cannot be capped)", alias)
+			}
+		}
+	}
 	for _, name := range sortedKeys(c.Models) {
 		m := c.Models[name]
 		where := "models." + name
@@ -391,6 +439,12 @@ func (c *Config) Validate() error {
 		}
 		if m.APIKeyEnv != "" && !envPattern.MatchString(m.APIKeyEnv) {
 			add("%s.api_key_env must name an environment variable, not hold a secret", where)
+		}
+		if (m.PromptUSDPerMTok != nil && *m.PromptUSDPerMTok < 0) || (m.CompletionUSDPerMTok != nil && *m.CompletionUSDPerMTok < 0) {
+			add("%s: prices must not be negative", where)
+		}
+		if m.MaxTokens < 0 {
+			add("%s.max_tokens must not be negative", where)
 		}
 	}
 	for name, v := range map[string]int{"cyclomatic": c.Metrics.Cyclomatic, "nesting": c.Metrics.Nesting, "params": c.Metrics.Params, "statements": c.Metrics.Statements} {
@@ -421,6 +475,39 @@ func (c *Config) Validate() error {
 		}
 	}
 	return errors.Join(errs...)
+}
+
+// AIModelsUsed lists, in first-use order, the model aliases a review calls: every discovery pass and
+// the triager in model mode.
+func (c *Config) AIModelsUsed() []string {
+	var out []string
+	seen := map[string]bool{}
+	use := func(a string) {
+		if !seen[a] {
+			seen[a] = true
+			out = append(out, a)
+		}
+	}
+	for _, p := range c.AI.Discovery {
+		use(p.Model)
+	}
+	if c.AI.Triage.Mode == "model" {
+		use(c.AI.Triage.Model)
+	}
+	return out
+}
+
+// CappedMaxTokens bounds completions when a spend cap is set but no max_tokens is configured: an
+// unbounded completion could not be reserved against the cap.
+const CappedMaxTokens = 4096
+
+// MaxTokensFor is the configured max_tokens of an alias: its own max_tokens, else
+// ai.budget.max_tokens (0 when neither is set).
+func (c *Config) MaxTokensFor(alias string) int {
+	if m := c.Models[alias]; m.MaxTokens > 0 {
+		return m.MaxTokens
+	}
+	return c.AI.Budget.MaxTokens
 }
 
 // ValidateEndpoint requires HTTPS except for explicitly local endpoints.

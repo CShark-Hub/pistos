@@ -106,6 +106,9 @@ func Agent(w io.Writer, env *finding.Envelope, o AgentOptions) {
 		}
 	}
 	agentIncomplete(w, r)
+	if sp := env.Telemetry.AISpend; sp != nil {
+		fmt.Fprintf(w, "AI spend: %s\n", AISpendLine(sp))
+	}
 	if len(issues) > 0 {
 		fmt.Fprintln(w, "Do not edit .pistos/ or tag issues. If you think an issue is wrong, tell the user its number.")
 	}

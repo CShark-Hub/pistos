@@ -46,6 +46,8 @@ type Options struct {
 	// the environment here, so an inherited value cannot redirect other git commands.
 	Staged    bool
 	IndexFile string
+	// MaxAIUSD overrides ai.budget.max_review_usd when set (0 = unlimited).
+	MaxAIUSD *float64
 }
 
 // ConfigError marks failures caused by invalid configuration or arguments (exit code 2).
@@ -119,6 +121,13 @@ func Run(ctx context.Context, o Options) (*finding.Envelope, error) {
 	if err != nil {
 		return nil, &ConfigError{err}
 	}
+	if o.MaxAIUSD != nil {
+		// Revalidated: a USD cap needs prices on every model alias the review uses.
+		cfg.AI.Budget.MaxReviewUSD = *o.MaxAIUSD
+		if err := cfg.Validate(); err != nil {
+			return nil, &ConfigError{fmt.Errorf("--max-ai-usd: %w", err)}
+		}
+	}
 	if o.Profile == "" {
 		o.Profile = cfg.Profile
 	}
@@ -182,12 +191,13 @@ func Run(ctx context.Context, o Options) (*finding.Envelope, error) {
 		return nil, &ConfigError{err}
 	}
 	var aiTelemetry []finding.AICallTelemetry
+	var aiSpend *finding.AISpend
 	if cfg.AI.Enabled && o.Profile == "thorough" && !scope.Empty && len(projects) > 0 {
 		out, err := e.runAI(ctx, scope, changes, projects, rep.Issues, fb)
 		if err != nil {
 			return nil, err
 		}
-		rep.AI, aiTelemetry = out.Report, out.Telemetry
+		rep.AI, aiTelemetry, aiSpend = out.Report, out.Telemetry, out.Spend
 		rep.Coverage.AI = aiSummary(out.Report)
 		for _, f := range out.Findings {
 			if !ownedByAny(projects, f.Location.Path) {
@@ -210,6 +220,7 @@ func Run(ctx context.Context, o Options) (*finding.Envelope, error) {
 	sort.Slice(e.telemetry, func(i, j int) bool { return e.telemetry[i].Task < e.telemetry[j].Task })
 	env.Telemetry.Tasks = e.telemetry
 	env.Telemetry.AI = aiTelemetry
+	env.Telemetry.AISpend = aiSpend
 
 	ledger := e.store.LoadLedger()
 	env.Numbers = ledger.AssignAll(rep.Issues, scope.HeadTree)

@@ -52,6 +52,8 @@ const (
 	StatusFailed         Status = "failed"
 	StatusIncomplete     Status = "incomplete"
 	StatusNotRequested   Status = "not-requested"
+	// StatusSkipped marks an AI call the per-review spend cap did not allow; never a clean result.
+	StatusSkipped Status = "skipped"
 )
 
 func (s Status) Completed() bool { return s == StatusComplete || s == StatusCachedComplete }

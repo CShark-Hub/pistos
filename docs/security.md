@@ -58,3 +58,11 @@ Repository content is marked as untrusted data in every prompt. Model output is 
 it cannot run commands, edit files or create decisions, and invalid anchors are rejected. Sending
 untrusted code to a hosted model is still disclosure of that code to the provider. Use a local
 endpoint, or keep AI disabled, when that matters.
+
+Review guidelines (`.pistos/review.md`, `[[ai.instructions]]`) are repository content too. They are
+read from git trees, never from the working directory: from the reviewed snapshot normally, and from
+the baseline under `--feedback-from-base`, so an untrusted change cannot rewrite its own review
+instructions (an edit in the change is simply not used). They are placed after the built-in rules,
+which state that guidelines may add focus areas and conventions but never override the untrusted-data
+handling, the no-commands rule, the answer format or decisions; model output is still parsed only as
+data. They are size-capped, and the report records which file, tree and blob were used.
