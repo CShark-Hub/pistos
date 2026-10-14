@@ -30,7 +30,7 @@ func (e *engine) runAI(ctx context.Context, s finding.Scope, changes []snapshot.
 	ownerOf := func(p string) (finding.Project, bool) {
 		best, ok := finding.Project{}, false
 		for _, pr := range projects {
-			if (pr.Root == "." || strings.HasPrefix(p, pr.Root+"/")) && (!ok || len(pr.Root) > len(best.Root)) {
+			if projectFilter(pr).Contains(p) && (!ok || len(pr.Root) > len(best.Root)) {
 				best, ok = pr, true
 			}
 		}
@@ -95,6 +95,16 @@ func (e *engine) runAI(ctx context.Context, s finding.Scope, changes []snapshot.
 		return e.sources.get(abs, pr.Ecosystem, func() ([]byte, error) { return os.ReadFile(abs) }).enclosing(line)
 	}
 	return ai.Run(ctx, in), nil
+}
+
+// ownedByAny keeps AI findings to files some analyzed project still claims after its path filters.
+func ownedByAny(projects []finding.Project, p string) bool {
+	for _, pr := range projects {
+		if projectFilter(pr).Contains(p) {
+			return true
+		}
+	}
+	return false
 }
 
 func aiSummary(r *finding.AIReport) string {

@@ -13,6 +13,8 @@ type Project struct {
 	Checks     []string          `json:"checks"`
 	Options    map[string]string `json:"options,omitempty"`
 	References []string          `json:"references,omitempty"`
+	Include    []string          `json:"include,omitempty"`
+	Exclude    []string          `json:"exclude,omitempty"`
 }
 
 // InputManifest identifies everything an analysis result depends on.

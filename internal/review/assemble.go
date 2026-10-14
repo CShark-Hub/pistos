@@ -5,6 +5,7 @@ import (
 	"sort"
 	"strings"
 
+	"example.com/pistos/internal/config"
 	"example.com/pistos/internal/finding"
 	"example.com/pistos/internal/plugin"
 )
@@ -33,6 +34,7 @@ func assemble(results []*taskResult, s finding.Scope, manifests map[string]*plug
 		baseComplete[p.ID] = true
 	}
 	for _, r := range results {
+		dropFiltered(r)
 		caps = append(caps, r.result)
 		pid := r.task.project.ID
 		switch r.task.Side {
@@ -87,6 +89,30 @@ func assemble(results []*taskResult, s finding.Scope, manifests map[string]*plug
 		}
 	}
 	return caps, issues
+}
+
+// dropFiltered removes findings in paths the project's include/exclude globs leave out. Tools still
+// analyze the whole project, so this runs after caching: changing the globs never reruns a tool.
+func dropFiltered(r *taskResult) {
+	f := projectFilter(r.task.project)
+	if !f.Active() {
+		return
+	}
+	var kept []finding.Finding
+	for _, fd := range r.result.Findings {
+		if !f.Drops(fd.Location.Path) {
+			kept = append(kept, fd)
+		}
+	}
+	if n := len(r.result.Findings) - len(kept); n > 0 && r.task.Side == sideHead {
+		r.result.Limitations = append(append([]string(nil), r.result.Limitations...),
+			fmt.Sprintf("%d finding(s) dropped by the project's path filters (%s)", n, f))
+	}
+	r.result.Findings = kept
+}
+
+func projectFilter(p finding.Project) config.PathFilter {
+	return config.PathFilter{Root: p.Root, Include: p.Include, Exclude: p.Exclude}
 }
 
 func relocationKey(f finding.Finding) string {

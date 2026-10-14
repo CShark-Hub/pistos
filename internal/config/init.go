@@ -109,6 +109,8 @@ func RenderConfig(langs []string, projects []Project) string {
 		b.WriteString("\n[[projects]]\n")
 		fmt.Fprintf(&b, "id = %s\nroot = %s\necosystem = %s\nchecks = %s\n",
 			strconv.Quote(p.ID), strconv.Quote(p.Root), strconv.Quote(p.Ecosystem), tomlList(p.Checks))
+		b.WriteString("# include = [\"src/**\"]   # optional globs relative to root; only these paths belong to the project\n")
+		b.WriteString("# exclude = [\"gen\", \"**/*_mock.go\"]   # optional; changes, findings and AI evidence here are ignored\n")
 	}
 	return b.String()
 }

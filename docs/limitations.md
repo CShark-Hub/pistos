@@ -14,6 +14,7 @@
 | Cross-cutting | Limitation |
 |---|---|
 | Platforms | Verified on Linux arm64 only; macOS/Windows CI defined but not run; Windows process-tree cleanup uses `taskkill /T` (compile-checked) |
+| Project include/exclude | Filters scope, findings and AI evidence; analyzers still read the whole project root (no per-tool exclude flags) |
 | Cache | Granularity is the project subtree (not per package/file); out-of-root dependencies only via `references`/shared inputs |
 | Lock | One toolchain per platform; docker image IDs differ per machine because apt/npm/pip layers are not bit-reproducible |
 | Feedback | Rename verification needs an identical blob or a locally available origin tree/commit; two identical anchor lines in one symbol are distinguished by order |

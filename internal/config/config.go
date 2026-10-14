@@ -93,6 +93,10 @@ type Project struct {
 	Options   map[string]string `toml:"options"`
 	// References lists project IDs whose sources participate in this project's semantic analysis.
 	References []string `toml:"references"`
+	// Include and Exclude are globs relative to Root that narrow which files belong to the project:
+	// changes elsewhere do not trigger its checks, and findings and AI evidence there are dropped.
+	Include []string `toml:"include"`
+	Exclude []string `toml:"exclude"`
 }
 
 type AI struct {
@@ -296,6 +300,16 @@ func (c *Config) Validate() error {
 		ids[p.ID] = true
 		if _, err := CleanRel(p.Root); err != nil {
 			add("%s.root: %v", where, err)
+		}
+		for _, g := range p.Include {
+			if err := validateGlob(g); err != nil {
+				add("%s.include: %v", where, err)
+			}
+		}
+		for _, g := range p.Exclude {
+			if err := validateGlob(g); err != nil {
+				add("%s.exclude: %v", where, err)
+			}
 		}
 		eco, err := NormalizeLanguage(p.Ecosystem)
 		if err != nil {

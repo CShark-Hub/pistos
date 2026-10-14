@@ -182,6 +182,9 @@ func Run(ctx context.Context, o Options) (*finding.Envelope, error) {
 		rep.AI, aiTelemetry = out.Report, out.Telemetry
 		rep.Coverage.AI = aiSummary(out.Report)
 		for _, f := range out.Findings {
+			if !ownedByAny(projects, f.Location.Path) {
+				continue
+			}
 			rep.Issues = append(rep.Issues, finding.Issue{Finding: f, Change: ChangeNew})
 		}
 	}
@@ -293,10 +296,10 @@ func (e *engine) affectedProjects(ctx context.Context, s finding.Scope, changes 
 		byID[p.ID] = p
 	}
 	changed := func(p config.Project) bool {
-		root, _ := config.CleanRel(p.Root)
+		f := p.Filter()
 		for _, c := range changes {
 			for _, path := range []string{c.Path, c.From} {
-				if path != "" && (root == "." || path == root || strings.HasPrefix(path, root+"/")) {
+				if path != "" && f.Contains(path) {
 					return true
 				}
 			}
@@ -326,7 +329,7 @@ func (e *engine) affectedProjects(ctx context.Context, s finding.Scope, changes 
 		}
 		if include {
 			root, _ := config.CleanRel(p.Root)
-			out = append(out, finding.Project{ID: p.ID, Root: root, Ecosystem: eco, Checks: p.Checks, Options: p.Options, References: p.References})
+			out = append(out, finding.Project{ID: p.ID, Root: root, Ecosystem: eco, Checks: p.Checks, Options: p.Options, References: p.References, Include: p.Include, Exclude: p.Exclude})
 		}
 	}
 	return out, nil

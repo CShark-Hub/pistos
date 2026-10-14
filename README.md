@@ -32,6 +32,23 @@ required checks, `130` cancelled.
 Language selection accepts aliases: `go`/`golang`, `py`/`python`, `js`/`ts`/`javascript`/`typescript`,
 `cs`/`csharp`/`"c#"` (quote `c#`, otherwise most shells treat `#` as a comment).
 
+To limit a project to part of its root, add globs relative to `root` in its `[[projects]]` entry:
+
+```toml
+[[projects]]
+id = "svc"
+root = "services/svc"
+ecosystem = "go"
+checks = ["go-vet", "staticcheck"]
+include = ["cmd", "internal/**"]          # optional; only these paths belong to the project
+exclude = ["internal/gen", "**/*_mock.go"] # optional; applied after include
+```
+
+`*` stays within a path segment, `**` spans segments, and a glob naming a directory covers everything
+below it. Changes only in left-out paths do not trigger the project's checks, findings there are
+dropped (the coverage line says how many) and they are not sent to AI. Tools still analyze the whole
+project, so excluded code can still affect type checking of included code.
+
 ## Language packs
 
 | Pack | Checks | Notes |

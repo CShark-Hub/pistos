@@ -65,6 +65,8 @@ func TestParseRejects(t *testing.T) {
 		"bad root":         {"", "inside the repository"},
 		"unknown model":    {"", "not a defined [models.*] alias"},
 		"llm vocabulary":   {"[llm]\nenabled = true\n", "unknown keys: llm"},
+		"escaping glob":    {"", "projects[0].exclude"},
+		"bad glob syntax":  {"", "projects[0].include"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			src := valid + tc.edit
@@ -79,6 +81,10 @@ func TestParseRejects(t *testing.T) {
 				src = strings.Replace(src, `profile = "balanced"`, `profile = "quick"`, 1)
 			case "bad root":
 				src = strings.Replace(src, `root = "."`, `root = "../elsewhere"`, 1)
+			case "escaping glob":
+				src = strings.Replace(src, `checks = ["go-vet"]`, "checks = [\"go-vet\"]\nexclude = [\"../other/**\"]", 1)
+			case "bad glob syntax":
+				src = strings.Replace(src, `checks = ["go-vet"]`, "checks = [\"go-vet\"]\ninclude = [\"src/[a\"]", 1)
 			case "unknown model":
 				src = strings.Replace(src, `model = "reviewer-a"`, `model = "missing"`, 1)
 			}
