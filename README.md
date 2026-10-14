@@ -79,6 +79,10 @@ per-pack containers (`execution.mode = "docker"`, restricted profile for untrust
 
 The Go module path `example.com/pistos` is a placeholder until the publishing identity is decided.
 
+## Team
+
+Mateusz Margos 👋
+
 ## License
 
 Apache-2.0. Third-party analyzers keep their own licenses; see [docs/third-party.md](docs/third-party.md).
