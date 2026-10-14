@@ -2,6 +2,9 @@
   <!-- Built by `pistos plugins install` against the Roslyn assemblies bundled with the installed SDK,
        so no package download is needed and the parser matches the compiler that builds the code. -->
   <PropertyGroup>
+    <!-- Install passes PistosTargetFramework explicitly; building the project directly (e.g. pistos checking
+         its own repo) falls back to the newest framework the running SDK ships. -->
+    <PistosTargetFramework Condition="'$(PistosTargetFramework)' == ''">net$(BundledNETCoreAppTargetFrameworkVersion)</PistosTargetFramework>
     <OutputType>Exe</OutputType>
     <TargetFramework>$(PistosTargetFramework)</TargetFramework>
     <Nullable>enable</Nullable>
