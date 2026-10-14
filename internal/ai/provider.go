@@ -10,7 +10,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"os"
 	"strings"
 	"sync"
 	"time"
@@ -86,9 +85,9 @@ func NewProvider(alias string, m config.ModelAlias) (Provider, error) {
 	}
 	p.client = &http.Client{Timeout: timeout}
 	if m.APIKeyEnv != "" {
-		p.key = os.Getenv(m.APIKeyEnv)
+		p.key, _ = LookupKey(m.APIKeyEnv)
 		if p.key == "" {
-			return nil, fmt.Errorf("model %s: environment variable %s is not set", alias, m.APIKeyEnv)
+			return nil, fmt.Errorf("model %s: environment variable %s is not set and no key is saved under that name (run `pistos ai setup`)", alias, m.APIKeyEnv)
 		}
 	}
 	return p, nil

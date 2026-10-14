@@ -3,6 +3,31 @@
 AI review is **advisory**: AI issues never block, never select the deterministic check plan and never
 create feedback decisions. It is disabled until configured and runs only with `--profile thorough`.
 
+## Setup
+
+`pistos ai setup` configures it interactively; `pistos plugins install` offers to run it at the end
+when AI is off and the session is interactive. The flow:
+
+1. **Provider**: any OpenAI-compatible endpoint, or OpenRouter (one key for models from many vendors,
+   with context sizes and prices shown while picking; only models that accept `response_format` are
+   offered).
+2. **Endpoint** (OpenAI-compatible only): a missing scheme, trailing slash or full
+   `…/chat/completions` URL is normalized; HTTPS is required except for `localhost`/`127.0.0.1`, and
+   reachability is checked.
+3. **Key**, read without echo on a terminal and verified without spending tokens (`GET /models`,
+   or OpenRouter's `GET /key`); a refused key is asked again, three refusals abort. An existing
+   `$OPENROUTER_API_KEY`, `$OPENAI_API_KEY` or saved key is offered first. Local servers may have no key.
+4. **Key storage**: config.toml gets only the variable name. The key either stays in your environment
+   or is saved in your user configuration directory (`pistos/credentials.json`, mode 0600;
+   `PISTOS_CREDENTIALS_FILE` relocates it), which is used when the variable is unset.
+5. **Models per review** (default 3, the union + triage design point), then one model per pass,
+   searched by name or picked by number; pass N defaults to pass N−1's model.
+6. **Triage**: a model (default for 2+ passes) or evidence only.
+7. A preview of the tables, then they are written. `[ai]`, `[[ai.discovery]]`, `[ai.triage]` and
+   `[models.*]` are replaced; `[ai.budget]` and everything else are left untouched.
+
+Manual configuration:
+
 ```toml
 [ai]
 enabled = true
@@ -34,7 +59,7 @@ keep_supported_singletons = true
 backend = "openai-compatible"
 endpoint = "https://api.example.com/v1"   # HTTPS, or http://localhost / 127.0.0.1 for local servers
 model = "provider-model-id"
-api_key_env = "PISTOS_REVIEWER_A_KEY"     # the variable's name; the key itself is never written anywhere
+api_key_env = "PISTOS_REVIEWER_A_KEY"     # the variable's name; the key itself is never in the repository
 timeout = "120s"
 concurrency = 2                            # simultaneous requests to this endpoint
 ```
@@ -45,7 +70,7 @@ One backend speaks the OpenAI Chat Completions request shape (`POST {endpoint}/c
 with `model`, `messages`, `temperature: 0`, `max_tokens`, `response_format: {"type": "json_object"}`;
 answers read from `choices[0].message.content` and `usage`). Hosted providers that offer this API and
 local servers (vLLM, SGLang, llama.cpp, Ollama's OpenAI endpoint) work unchanged. The key is read from
-`api_key_env` at request time, sent only as `Authorization: Bearer …` to that endpoint, removed from
+`api_key_env` at request time (falling back to a key saved by `pistos ai setup` under that name), sent only as `Authorization: Bearer …` to that endpoint, removed from
 every error message, and never placed in analyzer environments, config, lock, feedback, cache, state or
 reports. Repository `.env` files are never loaded. HTTP 429/5xx and network errors are retried at most
 twice with backoff; attempts are recorded in telemetry.

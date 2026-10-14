@@ -40,7 +40,9 @@ For pull requests from untrusted contributors.
 
 The provider client runs in the pistos core on the host, never inside the analysis container. It
 receives only curated evidence: changed source files, deterministic findings and decision
-summaries. API keys stay in the core process.
+summaries. API keys stay in the core process. A key saved by `pistos ai setup` lives outside the
+repository in the user configuration directory (`pistos/credentials.json`, mode 0600, plain text like
+other CLI credential files); an environment variable of the same name takes precedence.
 
 Repository content is marked as untrusted data in every prompt. Model output is parsed as data only:
 it cannot run commands, edit files or create decisions, and invalid anchors are rejected. Sending

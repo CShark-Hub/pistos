@@ -240,3 +240,9 @@ Not done / not verified (also in `docs/release-readiness.md`):
 - [x] `[[projects]] include` / `exclude` globs relative to the root (validated; `**`, directory globs cover their contents)
 - [x] Changes only in filtered-out paths do not select the project; findings there are dropped after caching (no tool rerun when globs change) with a coverage note; AI evidence and AI findings respect the filters
 - [x] `pistos init` writes commented examples
+
+## Post-milestone — interactive AI setup
+
+- [x] `pistos ai setup`: provider (OpenAI-compatible or OpenRouter), endpoint normalized/validated/reachability-checked, key read without echo and verified without spending tokens (3 attempts), models per review (default 3), model per pass from the endpoint's catalog (search, prices, JSON-mode filter on OpenRouter), triage mode/model, preview, then rewrite of the AI tables only
+- [x] Keys: config stores only the variable name; optional user-level credentials file (0600, outside the repository) used when the variable is unset
+- [x] `pistos plugins install` offers the setup on interactive terminals when AI is off

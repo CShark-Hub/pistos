@@ -45,6 +45,9 @@ func (a *app) pluginsCommand() *cobra.Command {
 					return withCode(ExitError, err)
 				}
 			}
+			if !o.Locked && !o.Offline {
+				a.offerAISetup(cmd.Context(), repo, cfg)
+			}
 			if ierr != nil {
 				return withCode(ExitError, ierr)
 			}

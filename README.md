@@ -19,6 +19,7 @@ pistos review                # working tree (staged, unstaged, untracked) agains
 pistos review --base main    # against merge-base(main, HEAD)
 pistos tag 3 irrelevant      # persist a decision; the issue stays suppressed in future reviews
 pistos report                # browse the report with code excerpts; select issues to ignore and save
+pistos ai setup              # optional: connect an OpenAI-compatible endpoint or OpenRouter for AI review
 ```
 
 Every review also writes `.pistos/state/report.html` and prints its link with the command that opens

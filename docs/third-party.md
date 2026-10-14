@@ -13,6 +13,8 @@ Pistos does not redistribute analyzers. Packs locate tools that the repository a
 | github.com/BurntSushi/toml | v1.6.0 | MIT |
 | go.yaml.in/yaml/v3 | v3.0.5 | MIT and Apache-2.0 |
 | golang.org/x/sync | v0.23.0 | BSD-3-Clause |
+| golang.org/x/term | v0.45.0 | BSD-3-Clause |
+| golang.org/x/sys | v0.47.0 | BSD-3-Clause |
 
 ## Analyzers invoked by packs (not bundled)
 

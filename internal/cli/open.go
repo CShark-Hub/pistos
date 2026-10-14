@@ -142,8 +142,8 @@ func hyperlink(w io.Writer, target, text string) string {
 	return "\x1b]8;;" + target + "\x1b\\" + text + "\x1b]8;;\x1b\\"
 }
 
-func isTerminal(w io.Writer) bool {
-	f, ok := w.(*os.File)
+func isTerminal(v any) bool {
+	f, ok := v.(*os.File)
 	if !ok {
 		return false
 	}
