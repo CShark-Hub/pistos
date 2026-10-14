@@ -33,7 +33,14 @@ type reviewOutput struct {
 // executeReview runs a review and renders it. Errors carry their exit code; the verdict's exit code
 // is left to the caller (git hooks map it differently).
 func (a *app) executeReview(ctx context.Context, o review.Options, out reviewOutput) (*finding.Envelope, error) {
+	// Verbose runs print progress lines instead, which a spinner would overwrite.
+	var spin *spinner
+	if o.Progress == nil {
+		spin = startSpinner(a.stderr, "reviewing")
+		o.Status = func(s string) { spin.Set("reviewing · " + s) }
+	}
 	env, err := review.Run(ctx, o)
+	spin.Stop()
 	if err != nil {
 		var ce *review.ConfigError
 		if errors.As(err, &ce) {

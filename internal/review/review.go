@@ -12,6 +12,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"example.com/pistos/internal/config"
@@ -36,6 +37,8 @@ type Options struct {
 	Jobs    int
 	// Progress receives human-readable progress lines; nil discards them.
 	Progress func(string)
+	// Status receives a short label of what the review is doing now (for a spinner); nil discards it.
+	Status func(string)
 	// RefreshAI bypasses recorded model responses and runs fresh discovery.
 	RefreshAI bool
 	// FeedbackFromBase applies the decisions committed in the baseline instead of the working copy,
@@ -193,6 +196,7 @@ func Run(ctx context.Context, o Options) (*finding.Envelope, error) {
 	var aiTelemetry []finding.AICallTelemetry
 	var aiSpend *finding.AISpend
 	if cfg.AI.Enabled && o.Profile == "thorough" && !scope.Empty && len(projects) > 0 {
+		e.status("AI review")
 		out, err := e.runAI(ctx, scope, changes, projects, rep.Issues, fb)
 		if err != nil {
 			return nil, err
@@ -233,6 +237,12 @@ func Run(ctx context.Context, o Options) (*finding.Envelope, error) {
 func (e *engine) progress(format string, a ...any) {
 	if e.opts.Progress != nil {
 		e.opts.Progress(fmt.Sprintf(format, a...))
+	}
+}
+
+func (e *engine) status(s string) {
+	if e.opts.Status != nil {
+		e.opts.Status(s)
 	}
 }
 
@@ -438,13 +448,26 @@ func (e *engine) plan(projects []finding.Project, s finding.Scope) ([]task, []*t
 func (e *engine) execute(ctx context.Context, tasks []task, results []*taskResult) {
 	sem := semaphore.NewWeighted(int64(e.opts.Jobs))
 	var wg sync.WaitGroup
+	runnable := func(i int) bool {
+		st := results[i].result.Status
+		return st != finding.StatusNotRequested && st != finding.StatusUnsupported
+	}
+	total := 0
+	for i := range tasks {
+		if runnable(i) {
+			total++
+		}
+	}
+	var done atomic.Int32
+	e.status(fmt.Sprintf("running checks 0/%d", total))
 	for i, t := range tasks {
-		if st := results[i].result.Status; st == finding.StatusNotRequested || st == finding.StatusUnsupported {
+		if !runnable(i) {
 			continue
 		}
 		wg.Add(1)
 		go func(i int, t task) {
 			defer wg.Done()
+			defer func() { e.status(fmt.Sprintf("running checks %d/%d", done.Add(1), total)) }()
 			if err := sem.Acquire(ctx, int64(t.Weight)); err != nil {
 				results[i].result = finding.CapabilityResult{Status: finding.StatusIncomplete, Error: "cancelled before start"}
 				return
