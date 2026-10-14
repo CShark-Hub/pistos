@@ -136,6 +136,7 @@ func (a *app) initCommand() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			a.printBanner(a.stdout)
 			var selected []string
 			for _, l := range langs {
 				eco, err := config.NormalizeLanguage(l)
