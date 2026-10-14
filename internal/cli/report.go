@@ -7,13 +7,16 @@ import (
 	"crypto/subtle"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net"
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -75,7 +78,7 @@ func (a *app) announceReport(path string) {
 	u := v.fileURL(path)
 	fmt.Fprintf(a.stderr, "report   %s\n", hyperlink(a.stderr, u, u))
 	if v.remote {
-		fmt.Fprintln(a.stderr, "         remote session: run `pistos report --no-open --addr 127.0.0.1:8765` and forward it with `ssh -L 8765:127.0.0.1:8765 <this host>`")
+		fmt.Fprintf(a.stderr, "         remote session: run `pistos report --no-open` and forward its port with `ssh -L %d:127.0.0.1:%d <this host>`\n", defaultReportPort, defaultReportPort)
 		return
 	}
 	if h := v.hintFor(path); h != "" {
@@ -84,8 +87,12 @@ func (a *app) announceReport(path string) {
 	fmt.Fprintln(a.stderr, "         triage in the browser and save decisions: pistos report")
 }
 
+// defaultReportPort is fixed so bookmarks and SSH port forwards keep working across runs.
+const defaultReportPort = 41211
+
 func (a *app) reportCommand() *cobra.Command {
-	var addr string
+	var host string
+	var port int
 	var noOpen, static bool
 	cmd := &cobra.Command{
 		Use:   "report",
@@ -99,7 +106,8 @@ interrupted.
 --static only regenerates and opens .pistos/state/report.html; that file cannot save decisions and
 shows the equivalent pistos tag commands instead.`,
 		Example: `  pistos report
-  pistos report --no-open --addr 127.0.0.1:8765
+  pistos report --port 8080
+  pistos report --no-open --host ::1 --port 0
   pistos report --static`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
@@ -126,10 +134,14 @@ shows the equivalent pistos tag commands instead.`,
 				}
 				return nil
 			}
-			return a.serveReport(ctx, repo, addr, !noOpen, v)
+			if port < 0 || port > 65535 {
+				return withCode(ExitError, fmt.Errorf("--port must be between 0 and 65535"))
+			}
+			return a.serveReport(ctx, repo, host, port, !noOpen, v)
 		},
 	}
-	cmd.Flags().StringVar(&addr, "addr", "127.0.0.1:0", "loopback address to serve on (port 0 picks a free one)")
+	cmd.Flags().StringVar(&host, "host", "127.0.0.1", "loopback IP address to serve on (127.0.0.1 or ::1)")
+	cmd.Flags().IntVar(&port, "port", defaultReportPort, "port to serve on (0 picks a free one)")
 	cmd.Flags().BoolVar(&noOpen, "no-open", false, "print the address instead of opening a browser")
 	cmd.Flags().BoolVar(&static, "static", false, "write and open the static report instead of serving it")
 	return cmd
@@ -151,15 +163,14 @@ type appliedDecision struct {
 	Description string `json:"description"`
 }
 
-func (a *app) serveReport(ctx context.Context, repo, addr string, open bool, v viewer) error {
-	host, _, err := net.SplitHostPort(addr)
-	if err != nil {
-		return withCode(ExitError, fmt.Errorf("--addr: %w", err))
-	}
+func (a *app) serveReport(ctx context.Context, repo, host string, port int, open bool, v viewer) error {
 	if ip := net.ParseIP(host); ip == nil || !ip.IsLoopback() {
-		return withCode(ExitError, fmt.Errorf("--addr must be a loopback IP address (127.0.0.1 or ::1): decisions are written without further authentication"))
+		return withCode(ExitError, fmt.Errorf("--host must be a loopback IP address (127.0.0.1 or ::1): decisions are written without further authentication"))
 	}
-	ln, err := net.Listen("tcp", addr)
+	ln, err := net.Listen("tcp", net.JoinHostPort(host, strconv.Itoa(port)))
+	if errors.Is(err, syscall.EADDRINUSE) {
+		return withCode(ExitError, fmt.Errorf("port %d is already in use (another `pistos report`?); stop it or pass --port N (0 picks a free one)", port))
+	}
 	if err != nil {
 		return withCode(ExitError, err)
 	}

@@ -40,7 +40,8 @@ after the printed preview.
 `pistos review` writes `.pistos/state/report.html` (self-contained, offline) with a highlighted code
 excerpt for every issue, and prints its `file://` link plus the platform's open command (`open`,
 `xdg-open`, `explorer.exe`, `wslview`; over SSH, a port-forwarding hint). `pistos report` serves the
-current report on a loopback address and opens it: select issues, choose per issue **this exact
+current report on `http://127.0.0.1:41211/` (`--port N` to change it, `--port 0` for a free one)
+and opens it: select issues, choose per issue **this exact
 issue** (issue scope) or **this kind of issue** (pattern scope: same family in the same project,
 optionally limited to path globs; the dialog shows how many current issues it covers), pick
 `irrelevant`, `false-positive` or `accepted-risk` and an optional reason, and save. Saving goes
